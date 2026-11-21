@@ -32,6 +32,29 @@ jobs:
           set -e
           test "$status" -eq 2 || { echo "Expected preview-only status 2, got $status"; exit 1; }
 
+      - name: Validate runtime tile URL injection
+        run: |
+          set -euo pipefail
+          docker run -d --name kunde-maps-configured-ci -p 127.0.0.1:18081:80 \
+            -e MAPS_TILE_URL=https://tiles.example.com/kazakhstan.pmtiles \
+            kunde-maps-render:ci
+          trap 'docker rm -f kunde-maps-configured-ci >/dev/null 2>&1 || true' EXIT
+          for i in 1 2 3 4 5; do
+            if curl -fsS http://127.0.0.1:18081/config.json >/tmp/maps-config.json; then break; fi
+            sleep 2
+          done
+          python3 -c 'import json; c=json.load(open("/tmp/maps-config.json")); assert c == {"styleUrl":"/style.json","tileUrl":"https://tiles.example.com/kazakhstan.pmtiles"}, c'
+          echo 'Runtime tile URL injection: OK'
+
+      - name: Reject unsafe tile URL
+        run: |
+          set -euo pipefail
+          if docker run --rm -e 'MAPS_TILE_URL=http://insecure.example.com/map.pmtiles' kunde-maps-render:ci \
+            /bin/sh /docker-entrypoint.d/40-configure-tiles.sh; then
+            echo 'Unsafe URL unexpectedly accepted' >&2
+            exit 1
+          fi
+          echo 'Unsafe tile URL rejected: OK'
       - name: Container logs
         if: always()
         run: docker logs kunde-maps-render-ci || true
