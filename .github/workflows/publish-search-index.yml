@@ -40,7 +40,8 @@ jobs:
           mkdir -p /tmp/kunde-search
           gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name kazakhstan-search-index --dir /tmp/kunde-search
           cd /tmp/kunde-search
-          # The producer records an absolute /tmp/kunde-osm path; the artifact is\n          # extracted to a different directory in this job. Verify by basename.\n          expected="$(awk 'NR==1 {print $1}' index.sha256)"\n          actual="$(sha256sum kazakhstan-search.sqlite3 | awk '{print $1}')"\n          test -n "$expected" && test "$expected" = "$actual"
+          # The producer records an absolute /tmp/kunde-osm path; the artifact is
+          # extracted to a different directory in this job. Verify by basename.\n          expected="$(awk 'NR==1 {print $1}' index.sha256)"\n          actual="$(sha256sum kazakhstan-search.sqlite3 | awk '{print $1}')"\n          test -n "$expected" && test "$expected" = "$actual"
           python3 - <<'PY'
           import sqlite3
           db = sqlite3.connect('file:kazakhstan-search.sqlite3?mode=ro', uri=True)
@@ -56,7 +57,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
-          RUN_ID: ${{ inputs.run_id }}
+          RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.run_id || github.event.workflow_run.id }}
         run: |
           set -euo pipefail
           python3 -m pip install 'awscli>=1.35,<2'
