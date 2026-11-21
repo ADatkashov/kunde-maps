@@ -2,10 +2,10 @@
 # Render serves the preview shell; Neon holds future geocoding/place metadata.
 # Tiles are NOT present until a separate PMTiles hosting pipeline is provisioned.
 resource "neon_project" "maps" {
-  name       = var.neon_project_name
-  org_id     = var.neon_org_id
-  region_id  = "aws-eu-central-1"
-  pg_version = 16
+  name                      = var.neon_project_name
+  org_id                    = var.neon_org_id
+  region_id                 = "aws-eu-central-1"
+  pg_version                = 16
   history_retention_seconds = 21600
   branch {
     name          = "main"
