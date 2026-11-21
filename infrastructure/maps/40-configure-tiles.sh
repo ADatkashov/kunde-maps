@@ -11,14 +11,12 @@ if [ -n "$search_url" ] && ! printf '%s' "$search_url" | grep -Eq '^https://[A-Z
   echo 'MAPS_SEARCH_URL must be a public HTTPS API endpoint' >&2
   exit 1
 fi
-python3 - "$tile_url" "$search_url" <<'PY'
-import json
-import sys
-config = {"styleUrl": "/style.json"}
-if sys.argv[1]:
-    config["tileUrl"] = sys.argv[1]
-if sys.argv[2]:
-    config["searchUrl"] = sys.argv[2]
-with open("/srv/kunde-web/config.json", "w", encoding="utf-8") as stream:
-    json.dump(config, stream)
-PY
+# Both values are validated against a restricted URL character set above.
+printf '{"styleUrl":"/style.json"' > /srv/kunde-web/config.json
+if [ -n "$tile_url" ]; then
+  printf ',"tileUrl":"%s"' "$tile_url" >> /srv/kunde-web/config.json
+fi
+if [ -n "$search_url" ]; then
+  printf ',"searchUrl":"%s"' "$search_url" >> /srv/kunde-web/config.json
+fi
+printf '}\\n' >> /srv/kunde-web/config.json
