@@ -73,11 +73,21 @@
     const copy = document.getElementById('copy-coords');
     const locate = document.getElementById('locate');
     let userMarker = null;
+    let selectedMarker = null;
     const updateCoords = () => {
       if (!coords) return;
       const {lng, lat} = map.getCenter();
       coords.textContent = lat.toFixed(5) + ', ' + lng.toFixed(5);
     };
+    map.on('click', event => {
+      if (selectedMarker) selectedMarker.remove();
+      selectedMarker = new maplibregl.Marker({color:'#e05b46'})
+        .setLngLat(event.lngLat).addTo(map);
+      const latitude = event.lngLat.lat.toFixed(5);
+      const longitude = event.lngLat.lng.toFixed(5);
+      status.textContent = 'Выбрана точка · ' + latitude + ', ' + longitude;
+      if (coords) coords.textContent = latitude + ', ' + longitude;
+    });
     map.on('moveend', updateCoords);
     updateCoords();
     copy?.addEventListener('click', async () => {
