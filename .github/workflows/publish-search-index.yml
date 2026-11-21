@@ -88,4 +88,4 @@ jobs:
             --key "search/kazakhstan-search-$RUN_ID.sha256" >/dev/null
           echo "Verified R2 index checksum sidecar exists"
           echo "Verified R2 object size: $remote_size bytes"
-          echo "Published immutable index: search/kazakhstan-search-$RUN_ID.sqlite3"
+          echo "Published immutable index and checksum: search/kazakhstan-search-$RUN_ID.sqlite3"
