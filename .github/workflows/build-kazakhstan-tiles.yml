@@ -1,6 +1,10 @@
 name: Build Kazakhstan PMTiles (manual)
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'ops/trigger-kazakhstan-tiles.txt'
 permissions:
   contents: read
 jobs:
