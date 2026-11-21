@@ -38,7 +38,8 @@ jobs:
       - name: Verify runtime config output
         run: |
           set -eu
-          mkdir -p /srv/kunde-web
+          sudo mkdir -p /srv/kunde-web
+          sudo chown "$(id -u):$(id -g)" /srv/kunde-web
           MAPS_TILE_URL=https://example.com/kazakhstan.pmtiles sh infrastructure/maps/40-configure-tiles.sh
           python3 - <<'PY'
           import json
