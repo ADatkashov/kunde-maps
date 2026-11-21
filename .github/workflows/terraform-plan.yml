@@ -1,0 +1,43 @@
+name: Terraform DEV plan (read-only)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    environment: maps-dev-plan
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+      TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+      TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_TOKEN_APP_TERRAFORM_IO }}
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_OWNER_ID: ${{ vars.RENDER_OWNER_ID }}
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      TF_VAR_neon_org_id: ${{ vars.NEON_ORG_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+      - name: Check required configuration
+        shell: bash
+        run: |
+          for name in TF_CLOUD_ORGANIZATION TF_WORKSPACE TF_TOKEN_app_terraform_io RENDER_API_KEY RENDER_OWNER_ID NEON_API_KEY TF_VAR_neon_org_id; do
+            if [ -z "${!name:-}" ]; then echo "::error::Missing $name"; exit 1; fi
+          done
+          test "$TF_WORKSPACE" = "kunde-maps-dev" || { echo "::error::Wrong Terraform workspace"; exit 1; }
+          test "$RENDER_OWNER_ID" = "tea-da7lqlk9v7es739gcjcg" || { echo "::error::Wrong Render workspace"; exit 1; }
+      - name: Initialize and plan
+        shell: bash
+        run: |
+          terraform -chdir=infrastructure/terraform/environments/dev init -input=false -no-color
+          terraform -chdir=infrastructure/terraform/environments/dev plan -input=false -lock-timeout=60s -out=maps.tfplan -no-color
+          terraform -chdir=infrastructure/terraform/environments/dev show -json maps.tfplan > /tmp/maps-plan.json
+          python3 scripts/ci/check_maps_plan.py < /tmp/maps-plan.json
+      - name: Summary
+        if: success()
+        run: echo "Plan policy passed. No infrastructure was applied." >> "$GITHUB_STEP_SUMMARY"
