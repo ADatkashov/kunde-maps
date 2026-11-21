@@ -1,0 +1,102 @@
+"""Build a local FTS5 search index from OSM-derived GeoJSON FeatureCollection/JSONL.
+
+Usage: python3 services/search/build_index.py input.geojsonl output.sqlite3
+Input must have Point geometries and properties with name, name:ru, name:kk,
+addr:street, addr:housenumber and optional category tags. Extract from licensed
+OSM data using a separate reproducible import pipeline.
+"""
+import json
+import sqlite3
+import sys
+from pathlib import Path
+
+
+def features(path):
+    with open(path, encoding="utf-8") as stream:
+        first = stream.read(1)
+        stream.seek(0)
+        if first == "{":
+            try:
+                obj = json.load(stream)
+                if obj.get("type") == "FeatureCollection":
+                    yield from obj.get("features", [])
+                    return
+                if obj.get("type") == "Feature":
+                    yield obj
+                    return
+            except json.JSONDecodeError:
+                stream.seek(0)
+        for line in stream:
+            if line.strip():
+                yield json.loads(line)
+
+
+def build(source, destination):
+    destination = Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temp = destination.with_suffix(".tmp")
+    temp.unlink(missing_ok=True)
+    db = sqlite3.connect(temp)
+    try:
+        db.executescript("""
+            CREATE TABLE places (
+              id INTEGER PRIMARY KEY, name TEXT NOT NULL,
+              name_ru TEXT, name_kk TEXT, kind TEXT NOT NULL,
+              lat REAL NOT NULL, lon REAL NOT NULL
+            );
+            CREATE VIRTUAL TABLE places_fts USING fts5(
+              name, name_ru, name_kk, address, content=''
+            );
+        """)
+        count = 0
+        for feature in features(source):
+            if feature.get("type") != "Feature":
+                continue
+            geometry = feature.get("geometry") or {}
+            if geometry.get("type") != "Point":
+                continue
+            coords = geometry.get("coordinates") or []
+            if len(coords) < 2:
+                continue
+            lon, lat = coords[:2]
+            if not isinstance(lon, (int, float)) or not isinstance(lat, (int, float)):
+                continue
+            if not (-180 <= lon <= 180 and -90 <= lat <= 90):
+                continue
+            p = feature.get("properties") or {}
+            street = str(p.get("addr:street") or "").strip()
+            number = str(p.get("addr:housenumber") or "").strip()
+            name = str(p.get("name") or p.get("name:ru") or p.get("name:kk") or
+                       (street + " " + number).strip()).strip()
+            if not name:
+                continue
+            ru = str(p.get("name:ru") or "")
+            kk = str(p.get("name:kk") or "")
+            kind = str(p.get("amenity") or p.get("shop") or p.get("place") or "address")
+            address = " ".join(part for part in [street, number] if part)
+            cursor = db.execute(
+                "INSERT INTO places(name,name_ru,name_kk,kind,lat,lon) VALUES(?,?,?,?,?,?)",
+                (name, ru, kk, kind, lat, lon),
+            )
+            db.execute(
+                "INSERT INTO places_fts(rowid,name,name_ru,name_kk,address) VALUES(?,?,?,?,?)",
+                (cursor.lastrowid, name, ru, kk, address),
+            )
+            count += 1
+            if count % 10000 == 0:
+                db.commit()
+        db.commit()
+        db.execute("PRAGMA integrity_check")
+        db.close()
+        temp.replace(destination)
+        return count
+    except BaseException:
+        db.close()
+        temp.unlink(missing_ok=True)
+        raise
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        raise SystemExit("Usage: build_index.py input.geojsonl output.sqlite3")
+    print("Indexed", build(sys.argv[1], sys.argv[2]), "places")
