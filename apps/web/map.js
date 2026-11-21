@@ -72,6 +72,22 @@
     const coords = document.getElementById('coords');
     const copy = document.getElementById('copy-coords');
     const locate = document.getElementById('locate');
+    const language = document.getElementById('language');
+    const selection = document.getElementById('selection');
+    const selectionTitle = document.getElementById('selection-title');
+    const selectionCoords = document.getElementById('selection-coords');
+    const selectionClose = document.getElementById('selection-close');
+    let currentLanguage = 'ru';
+    const labelExpression = lang => ['coalesce', ['get', 'name:' + lang], ['get', 'name'], ''];
+    language?.addEventListener('click', () => {
+      currentLanguage = currentLanguage === 'ru' ? 'kk' : 'ru';
+      for (const layer of ['street-labels', 'place-labels']) {
+        if (map.getLayer(layer)) map.setLayoutProperty(layer, 'text-field', labelExpression(currentLanguage));
+      }
+      language.textContent = currentLanguage === 'ru' ? 'ҚАЗ' : 'РУС';
+      language.setAttribute('aria-label', currentLanguage === 'ru' ? 'Переключить подписи на казахский' : 'Переключить подписи на русский');
+      status.textContent = currentLanguage === 'kk' ? 'Қазақша атаулар қосылды' : 'Русские названия включены';
+    });
     let userMarker = null;
     let selectedMarker = null;
     const updateCoords = () => {
@@ -85,8 +101,21 @@
         .setLngLat(event.lngLat).addTo(map);
       const latitude = event.lngLat.lat.toFixed(5);
       const longitude = event.lngLat.lng.toFixed(5);
+      const pointName = map.queryRenderedFeatures(event.point, {layers:['place-labels','street-labels']})
+        .map(feature => feature.properties?.['name:' + currentLanguage] || feature.properties?.name)
+        .find(Boolean);
+      if (selection && selectionTitle && selectionCoords) {
+        selection.hidden = false;
+        selectionTitle.textContent = pointName || (currentLanguage === 'kk' ? 'Таңдалған нүкте' : 'Выбранная точка');
+        selectionCoords.textContent = latitude + ', ' + longitude;
+      }
       status.textContent = 'Выбрана точка · ' + latitude + ', ' + longitude;
       if (coords) coords.textContent = latitude + ', ' + longitude;
+    });
+    selectionClose?.addEventListener('click', () => {
+      if (selection) selection.hidden = true;
+      if (selectedMarker) selectedMarker.remove();
+      selectedMarker = null;
     });
     map.on('moveend', updateCoords);
     updateCoords();
