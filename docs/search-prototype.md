@@ -56,3 +56,22 @@ split-by-city processing; successful completion is not yet confirmed.
 
 The code is a proof of concept. Do not connect it to public traffic until
 index quality, licensing, security and rate limiting have been reviewed.
+
+## Isolated API container (not deployed)
+
+`infrastructure/search/Dockerfile` builds a separate Python 3.12 image.
+Mount a verified SQLite index read-only at `/data/kazakhstan-search.sqlite3`;
+the container deliberately does **not** download untrusted data at startup.
+
+```sh
+docker build -f infrastructure/search/Dockerfile -t kunde-maps-search .
+docker run --rm -p 10000:10000 \\
+  -v /absolute/path/kazakhstan-search.sqlite3:/data/kazakhstan-search.sqlite3:ro \\
+  kunde-maps-search
+curl 'http://localhost:10000/health'
+```
+
+Missing index means HTTP 503 on both readiness and search; do not expose
+this container to public traffic until an immutable index storage location,
+rate limiting, access controls, monitoring, and backups are configured.
+The existing Render web service is intentionally unchanged.
