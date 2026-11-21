@@ -69,6 +69,43 @@
       center:[76.945,43.238], zoom:11, attributionControl:true
     });
     map.addControl(new maplibregl.NavigationControl(),'top-right');
+    const coords = document.getElementById('coords');
+    const copy = document.getElementById('copy-coords');
+    const locate = document.getElementById('locate');
+    let userMarker = null;
+    const updateCoords = () => {
+      const {lng, lat} = map.getCenter();
+      coords.textContent = lat.toFixed(5) + ', ' + lng.toFixed(5);
+    };
+    map.on('moveend', updateCoords);
+    updateCoords();
+    copy.addEventListener('click', async () => {
+      const value = coords.textContent;
+      try {
+        await navigator.clipboard.writeText(value);
+        copy.textContent = 'Скопировано ✓';
+      } catch (_) {
+        status.textContent = 'Не удалось скопировать координаты';
+      }
+    });
+    locate.addEventListener('click', () => {
+      if (!navigator.geolocation) {
+        status.textContent = 'Геолокация не поддерживается браузером';
+        return;
+      }
+      status.textContent = 'Определяем местоположение…';
+      navigator.geolocation.getCurrentPosition(({coords: position}) => {
+        const point = [position.longitude, position.latitude];
+        if (userMarker) userMarker.remove();
+        userMarker = new maplibregl.Marker({color:'#1463f3'}).setLngLat(point).addTo(map);
+        map.flyTo({center:point,zoom:15,essential:true});
+        status.textContent = 'Местоположение определено';
+      }, error => {
+        status.textContent = error.code === 1
+          ? 'Разрешите доступ к геолокации в браузере'
+          : 'Не удалось определить местоположение';
+      }, {enableHighAccuracy:true,timeout:12000,maximumAge:30000});
+    });
     map.on('load',()=>{status.textContent='Алматы · стиль карты загружен';});
     map.on('error',(e)=>{status.textContent='Ошибка карты: '+(e.error?.message||'проверьте тайлы');});
   } catch (error) {
