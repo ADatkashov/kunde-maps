@@ -12,20 +12,30 @@ from pathlib import Path
 
 
 def features(path):
+    """Stream JSONL without loading the entire national extract into memory."""
     with open(path, encoding="utf-8") as stream:
-        first = stream.read(1)
-        stream.seek(0)
-        if first == "{":
-            try:
-                obj = json.load(stream)
-                if obj.get("type") == "FeatureCollection":
-                    yield from obj.get("features", [])
-                    return
-                if obj.get("type") == "Feature":
-                    yield obj
-                    return
-            except json.JSONDecodeError:
-                stream.seek(0)
+        first_line = stream.readline()
+        if not first_line.strip():
+            return
+        try:
+            first_object = json.loads(first_line)
+        except json.JSONDecodeError:
+            # A pretty-printed FeatureCollection may span multiple lines.
+            stream.seek(0)
+            obj = json.load(stream)
+            if obj.get("type") == "FeatureCollection":
+                yield from obj.get("features", [])
+                return
+            if obj.get("type") == "Feature":
+                yield obj
+                return
+            raise ValueError("Expected GeoJSON FeatureCollection or JSONL Features")
+        if first_object.get("type") == "FeatureCollection":
+            yield from first_object.get("features", [])
+            return
+        if first_object.get("type") != "Feature":
+            raise ValueError("Expected GeoJSON FeatureCollection or JSONL Features")
+        yield first_object
         for line in stream:
             if line.strip():
                 yield json.loads(line)
