@@ -14,7 +14,7 @@ class SearchIndexTest(unittest.TestCase):
             record = {"type": "Feature", "geometry": {"type": "Point", "coordinates": [76.9, 43.2]},
                       "properties": {"name": "Алматы"}}
             source.write_text("\n".join(json.dumps(record, ensure_ascii=False)
-                                         for _ in range(5000)) + "\\n", encoding="utf-8")
+                                         for _ in range(5000)) + "\n", encoding="utf-8")
             self.assertEqual(sum(1 for _ in features(source)), 5000)
 
     def test_multilingual_names_and_addresses(self):
