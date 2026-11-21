@@ -36,7 +36,14 @@ def search(db_path, query, limit=MAX_RESULTS):
 
 
 class Handler(BaseHTTPRequestHandler):
+    def log_message(self, format, *args):
+        # Never log search queries or user-provided URL parameters.
+        pass
+
     def do_GET(self):
+        if len(self.path) > 2048:
+            self.reply(414, {"error": "request_uri_too_long"})
+            return
         parsed = urlparse(self.path)
         if parsed.path == "/health":
             ready = DB_PATH.is_file()
