@@ -1,0 +1,85 @@
+name: Publish Kazakhstan PMTiles to Cloudflare R2
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'ops/trigger-r2-upload.txt'
+permissions:
+  actions: read
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: kunde-maps-tiles
+      SOURCE_RUN_ID: '44918803010'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check secrets without printing them
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY; do
+            test -n "${!name}" || { echo "Missing GitHub secret: $name" >&2; exit 1; }
+          done
+      - name: Download verified successful build artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/kunde-maps-r2
+          gh run download "$SOURCE_RUN_ID" --repo "${{ github.repository }}" --name kazakhstan-pmtiles --dir /tmp/kunde-maps-r2
+          test -s /tmp/kunde-maps-r2/kazakhstan.pmtiles
+          cd /tmp/kunde-maps-r2
+          sha256sum -c kazakhstan.pmtiles.sha256
+          python3 "$GITHUB_WORKSPACE/scripts/verify-pmtiles.py" kazakhstan.pmtiles
+      - name: Upload archive using S3-compatible API
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --user boto3
+          python3 - <<'PY'
+          import os
+          import boto3
+          from boto3.s3.transfer import TransferConfig
+          client = boto3.client(
+              "s3",
+              endpoint_url="https://" + os.environ["R2_ACCOUNT_ID"] + ".r2.cloudflarestorage.com",
+              aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
+              aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+              region_name="auto",
+          )
+          bucket = os.environ["R2_BUCKET"]
+          key = "kazakhstan.pmtiles"
+          path = "/tmp/kunde-maps-r2/kazakhstan.pmtiles"
+          client.upload_file(
+              path, bucket, key,
+              ExtraArgs={"ContentType": "application/octet-stream"},
+              Config=TransferConfig(multipart_threshold=32 * 1024 * 1024, multipart_chunksize=16 * 1024 * 1024),
+          )
+          actual = client.head_object(Bucket=bucket, Key=key)["ContentLength"]
+          expected = os.path.getsize(path)
+          if actual != expected:
+              raise RuntimeError(f"R2 size mismatch: {actual} != {expected}")
+          print(f"Uploaded {key} to R2 and verified size: {actual} bytes")
+          PY
+      - name: Verify public HTTP Range endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://pub-237f2a01acb04791aad25708c16f3d8a.r2.dev/kazakhstan.pmtiles"
+          code=$(curl -sSL --retry 4 --retry-delay 3 -H 'Range: bytes=0-15' -o /tmp/maps-r2-header.bin -w '%{http_code}' "$url")
+          test "$code" = 206 || { echo "R2 public endpoint returned HTTP $code instead of 206; check public access" >&2; exit 1; }
+          test "$(wc -c </tmp/maps-r2-header.bin)" -eq 16
+          python3 - <<'PY'
+          from pathlib import Path
+          header=Path('/tmp/maps-r2-header.bin').read_bytes()
+          assert header[:8] == b'PMTiles\\x03', 'Not a PMTiles v3 archive'
+          print('R2 public PMTiles range probe: OK')
+          PY
