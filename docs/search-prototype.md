@@ -75,3 +75,21 @@ Missing index means HTTP 503 on both readiness and search; do not expose
 this container to public traffic until an immutable index storage location,
 rate limiting, access controls, monitoring, and backups are configured.
 The existing Render web service is intentionally unchanged.
+
+## Verified index publication
+
+A successful Kazakhstan build is available as GitHub Actions artifact until
+2026-11-24 (run 44930606981, artifact kazakhstan-search-index, approximately
+155 MB). The separate manual workflow
+`.github/workflows/publish-search-index.yml` accepts the source run ID,
+verifies the artifact's SHA-256 and SQLite integrity, and uploads it to
+`s3://kunde-maps-tiles/search/kazakhstan-search-<run_id>.sqlite3`.
+The publication workflow expects repository secrets `R2_ACCOUNT_ID`,
+`R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY`; verify the configured
+secret names before running. The index object may be publicly readable
+depending on the bucket's public access policy; do not store credentials or
+personal information in it. The existing map tiles are not overwritten.
+
+This workflow is **not** automatically dispatched or proof of upload.
+After upload, verify object size, checksum, and download access before
+configuring any API service. OSM/ODbL attribution and provenance remain required.
