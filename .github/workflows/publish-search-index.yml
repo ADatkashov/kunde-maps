@@ -71,6 +71,9 @@ jobs:
           aws --endpoint-url "$endpoint" s3 cp /tmp/kunde-search/kazakhstan-search.sqlite3 \
             "s3://kunde-maps-tiles/search/kazakhstan-search-$RUN_ID.sqlite3" \
             --content-type application/vnd.sqlite3
+          aws --endpoint-url "$endpoint" s3 cp /tmp/kunde-search/index.sha256 \
+            "s3://kunde-maps-tiles/search/kazakhstan-search-$RUN_ID.sha256" \
+            --content-type text/plain
           aws --endpoint-url "$endpoint" s3 cp /tmp/kunde-search/PROVENANCE.txt \
             "s3://kunde-maps-tiles/search/kazakhstan-search-$RUN_ID-PROVENANCE.txt" \
             --content-type text/plain
