@@ -25,6 +25,26 @@
         ).href;
       }
     }
+    // A successful style response does not imply that the PMTiles archive exists.
+    // Check same-origin archives before creating the map so the preview never
+    // reports "loaded" while displaying an empty background.
+    for (const source of Object.values(style.sources || {})) {
+      if (typeof source.url !== 'string' || !source.url.startsWith('pmtiles://')) continue;
+      const tileUrl = new URL(source.url.slice('pmtiles://'.length));
+      if (tileUrl.origin !== window.location.origin) continue;
+      const probe = await fetch(tileUrl.href, {
+        method: 'GET',
+        headers: { Range: 'bytes=0-15' },
+        cache: 'no-store'
+      });
+      if (probe.status !== 206) {
+        throw new Error('PMTiles недоступен (HTTP ' + probe.status + '). Сначала создайте и опубликуйте архив карты.');
+      }
+      const contentRange = probe.headers.get('content-range') || '';
+      if (!/^bytes 0-15\/\d+$/.test(contentRange)) {
+        throw new Error('Сервер тайлов не поддерживает корректные HTTP Range-запросы.');
+      }
+    }
     const map = new maplibregl.Map({
       container:'map', style,
       center:[76.945,43.238], zoom:11, attributionControl:true
