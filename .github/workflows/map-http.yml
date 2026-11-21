@@ -1,0 +1,31 @@
+name: Map HTTP smoke
+on:
+  push:
+  pull_request:
+jobs:
+  http:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Docker Compose
+        run: docker compose -f infrastructure/maps/docker-compose.yml config --quiet
+      - name: Start preview web server
+        run: |
+          cp apps/web/config.example.json apps/web/config.json
+          mkdir -p data/tiles
+          docker compose -f infrastructure/maps/docker-compose.yml up -d
+      - name: HTTP smoke
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if curl -fsS http://127.0.0.1:8080/ >/dev/null; then break; fi
+            sleep 2
+          done
+          bash scripts/test-local-map.sh
+      - name: Container logs
+        if: always()
+        run: docker compose -f infrastructure/maps/docker-compose.yml logs --no-color
+      - name: Stop containers
+        if: always()
+        run: docker compose -f infrastructure/maps/docker-compose.yml down
