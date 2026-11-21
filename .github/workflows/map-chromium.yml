@@ -14,12 +14,12 @@ jobs:
         run: |
           docker build -f infrastructure/maps/Dockerfile -t kunde-maps-browser:ci .
           docker run -d --name kunde-maps-browser -p 127.0.0.1:18080:80 kunde-maps-browser:ci
-      - name: Install browser test dependencies
+      - name: Chromium smoke in supported Playwright container
         run: |
-          npm install --no-save --no-package-lock playwright@1.58.2
-          npx playwright install --with-deps chromium
-      - name: Chromium smoke
-        run: node scripts/test-map-chromium.js
+          docker run --rm --network host \
+            -v "$PWD:/work" -w /work \
+            mcr.microsoft.com/playwright:v1.58.2-noble \
+            bash -lc 'npm install --no-save --no-package-lock playwright@1.58.2 && node scripts/test-map-chromium.js'
       - name: Container logs
         if: always()
         run: docker logs kunde-maps-browser || true
