@@ -15,5 +15,7 @@ jobs:
         run: |
           python3 -m json.tool apps/web/style.json >/dev/null
           python3 -m json.tool apps/web/config.example.json >/dev/null
+      - name: Test map browser API behavior (Node VM)
+        run: node scripts/test-map-browser.js
       - name: Check shell syntax
         run: bash -n scripts/build-kazakhstan-tiles.sh
