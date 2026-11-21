@@ -6,7 +6,7 @@ import unittest
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 import server
 from build_index import build
@@ -38,6 +38,24 @@ class SearchHTTPTest(unittest.TestCase):
                 with self.assertRaises(HTTPError) as invalid:
                     urlopen(base + "/v1/search?q=a")
                 self.assertEqual(invalid.exception.code, 400)
+                for bad in ("limit=0", "limit=999", "limit=abc", "limit=-1"):
+                    with self.assertRaises(HTTPError) as bad_limit:
+                        urlopen(base + "/v1/search?q=%D0%90%D0%B1%D0%B0%D1%8F&" + bad)
+                    self.assertEqual(bad_limit.exception.code, 400, bad)
+                with urlopen(base + "/v1/search?q=%D0%90%D0%B1%D0%B0%D1%8F&limit=1") as response:
+                    self.assertEqual(len(json.load(response)["results"]), 1)
+                # SQL/FTS injection strings must be inert and return valid JSON.
+                for attack in ("%27%3B%20DROP%20TABLE%20places%3B--", "%22%20OR%20%2A", "NEAR%28a%20b%29"):
+                    with urlopen(base + "/v1/search?q=" + attack) as response:
+                        self.assertIsInstance(json.load(response)["results"], list)
+                request = Request(base + "/v1/search?q=%D0%90%D0%B1%D0%B0%D1%8F",
+                                  headers={"Origin": "https://kunde-maps-web-dev.onrender.com"})
+                with urlopen(request) as response:
+                    self.assertEqual(response.headers["Access-Control-Allow-Origin"],
+                                     "https://kunde-maps-web-dev.onrender.com")
+                request = Request(base + "/v1/search?q=%D0%90%D0%B1%D0%B0%D1%8F", headers={"Origin": "https://evil.example"})
+                with urlopen(request) as response:
+                    self.assertIsNone(response.headers["Access-Control-Allow-Origin"])
                 server.DB_PATH = Path(folder) / "missing.sqlite3"
                 with self.assertRaises(HTTPError) as not_ready:
                     urlopen(base + "/health")

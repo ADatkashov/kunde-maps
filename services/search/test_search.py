@@ -37,6 +37,21 @@ class SearchIndexTest(unittest.TestCase):
             self.assertEqual(len(search(target, "Абая 12")), 1)
             self.assertEqual(search(target, '" OR *'), [])
 
+    def test_settlements_outrank_pois_with_same_name(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "places.geojsonl"
+            records = [
+                {"type": "Feature", "geometry": {"type": "Point", "coordinates": [51.1, 43.6]},
+                 "properties": {"name": "Шымкент", "amenity": "cafe"}},
+                {"type": "Feature", "geometry": {"type": "Point", "coordinates": [69.6, 42.3]},
+                 "properties": {"name": "Шымкент", "place": "city"}},
+            ]
+            source.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in records), encoding="utf-8")
+            target = root / "s.sqlite3"
+            build(source, target)
+            self.assertEqual(search(target, "Шымкент")[0]["kind"], "city")
+
 
 if __name__ == "__main__":
     unittest.main()
