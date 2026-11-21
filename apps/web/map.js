@@ -74,12 +74,13 @@
     const locate = document.getElementById('locate');
     let userMarker = null;
     const updateCoords = () => {
+      if (!coords) return;
       const {lng, lat} = map.getCenter();
       coords.textContent = lat.toFixed(5) + ', ' + lng.toFixed(5);
     };
     map.on('moveend', updateCoords);
     updateCoords();
-    copy.addEventListener('click', async () => {
+    copy?.addEventListener('click', async () => {
       const value = coords.textContent;
       try {
         await navigator.clipboard.writeText(value);
@@ -88,7 +89,7 @@
         status.textContent = 'Не удалось скопировать координаты';
       }
     });
-    locate.addEventListener('click', () => {
+    locate?.addEventListener('click', () => {
       if (!navigator.geolocation) {
         status.textContent = 'Геолокация не поддерживается браузером';
         return;
