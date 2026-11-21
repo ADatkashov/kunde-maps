@@ -16,4 +16,5 @@ docker run --rm -v "$PWD/data:/data" ghcr.io/onthegomap/planetiler:latest \
   --osm-path=/data/osm/kazakhstan-latest.osm.pbf \
   --output=/data/tiles/kazakhstan.pmtiles \
   --force
-echo "Created data/tiles/kazakhstan.pmtiles"
+python3 scripts/verify-pmtiles.py data/tiles/kazakhstan.pmtiles
+echo "Created data/tiles/kazakhstan.pmtiles (PMTiles v3 header verified)"
