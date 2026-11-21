@@ -146,6 +146,61 @@
           : 'Не удалось определить местоположение';
       }, {enableHighAccuracy:true,timeout:12000,maximumAge:30000});
     });
+    const searchForm = document.getElementById('map-search');
+    const searchQuery = document.getElementById('search-query');
+    const searchResults = document.getElementById('search-results');
+    // Search only currently loaded vector tiles. A country-wide address index is a separate milestone.
+    searchForm?.addEventListener('submit', event => {
+      event.preventDefault();
+      if (!searchQuery || !searchResults) return;
+      const needle = searchQuery.value.trim().toLocaleLowerCase();
+      if (needle.length < 2) return;
+      searchResults.replaceChildren();
+      searchResults.hidden = false;
+      const seen = new Set();
+      const matches = [];
+      for (const layer of ['place', 'transportation_name']) {
+        for (const feature of map.querySourceFeatures('kunde', {sourceLayer:layer})) {
+          const properties = feature.properties || {};
+          const names = [properties['name:ru'], properties['name:kk'], properties.name].filter(Boolean);
+          if (!names.some(name => name.toLocaleLowerCase().includes(needle))) continue;
+          const geometry = feature.geometry;
+          if (!geometry || !geometry.coordinates) continue;
+          let point = geometry.coordinates;
+          while (Array.isArray(point) && Array.isArray(point[0])) point = point[0];
+          if (!Array.isArray(point) || !Number.isFinite(point[0]) || !Number.isFinite(point[1])) continue;
+          const name = properties['name:' + currentLanguage] || properties.name || names[0];
+          const key = name + ':' + point.map(n => n.toFixed(3)).join(',');
+          if (seen.has(key)) continue;
+          seen.add(key);
+          matches.push({name, point});
+          if (matches.length >= 12) break;
+        }
+        if (matches.length >= 12) break;
+      }
+      if (!matches.length) {
+        searchResults.textContent = 'В загруженной области совпадений нет. Переместите карту и попробуйте снова.';
+        return;
+      }
+      for (const match of matches) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = match.name;
+        button.addEventListener('click', () => {
+          map.flyTo({center:match.point,zoom:Math.max(map.getZoom(),14),essential:true});
+          if (selectedMarker) selectedMarker.remove();
+          selectedMarker = new maplibregl.Marker({color:'#e05b46'}).setLngLat(match.point).addTo(map);
+          if (selection && selectionTitle && selectionCoords) {
+            selection.hidden = false;
+            selectionTitle.textContent = match.name;
+            selectionCoords.textContent = match.point[1].toFixed(5) + ', ' + match.point[0].toFixed(5);
+          }
+          searchResults.hidden = true;
+          status.textContent = 'Найдено на карте: ' + match.name;
+        });
+        searchResults.appendChild(button);
+      }
+    });
     map.on('load',()=>{status.textContent='Алматы · стиль карты загружен';});
     map.on('error',(e)=>{status.textContent='Ошибка карты: '+(e.error?.message||'проверьте тайлы');});
   } catch (error) {
