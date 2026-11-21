@@ -83,5 +83,9 @@ jobs:
             --query ContentLength --output text)"
           local_size="$(stat -c '%s' /tmp/kunde-search/kazakhstan-search.sqlite3)"
           test "$remote_size" = "$local_size"
+          aws --endpoint-url "$endpoint" s3api head-object \
+            --bucket kunde-maps-tiles \
+            --key "search/kazakhstan-search-$RUN_ID.sha256" >/dev/null
+          echo "Verified R2 index checksum sidecar exists"
           echo "Verified R2 object size: $remote_size bytes"
           echo "Published immutable index: search/kazakhstan-search-$RUN_ID.sqlite3"
