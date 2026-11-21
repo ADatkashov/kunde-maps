@@ -1,0 +1,22 @@
+name: Search index tests
+on:
+  push:
+    paths:
+      - 'services/search/**'
+      - '.github/workflows/search-tests.yml'
+  pull_request:
+    paths:
+      - 'services/search/**'
+      - '.github/workflows/search-tests.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test search index and API modules
+        run: python -m unittest discover -s services/search -p 'test_*.py' -v
