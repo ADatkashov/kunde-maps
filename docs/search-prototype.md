@@ -93,3 +93,31 @@ personal information in it. The existing map tiles are not overwritten.
 This workflow is **not** automatically dispatched or proof of upload.
 After upload, verify object size, checksum, and download access before
 configuring any API service. OSM/ODbL attribution and provenance remain required.
+
+## Index provisioning (Render) and recovery
+
+`services/search/provision_index.py` runs before the server starts. It tries the primary URL, then an optional fallback
+(GitHub Release asset), and accepts a file only if: SHA256 matches, `PRAGMA quick_check` is `ok`, `places` has at least
+`MAPS_SEARCH_MIN_ROWS` rows (default 1000) and the FTS table is queryable. The file is replaced atomically; a verified
+local copy is reused (Render Free storage is ephemeral, so a restart on a new instance downloads again). Downloads use
+timeouts and 3 attempts with exponential backoff for network/5xx/429; 403/404 are not retried and trigger the next source.
+
+| Variable | Purpose |
+| --- | --- |
+| `MAPS_SEARCH_INDEX_URL` | primary HTTPS URL of `kazakhstan-search-<run>.sqlite3` |
+| `MAPS_SEARCH_INDEX_FALLBACK_URL` | optional GitHub Release URL of the same file |
+| `MAPS_SEARCH_INDEX_SHA256` | pinned digest (preferred); otherwise the same-host `.sha256` sidecar is used |
+| `MAPS_SEARCH_DB` | destination path (default `/data/kazakhstan-search.sqlite3`) |
+
+### Incident 2026-11-21: HTTP 403 from R2
+Cause: Cloudflare (`r2.dev`) blocks the default `Python-urllib/x.y` User-Agent (HTTP 403, body `error code: 1010`). The same
+object returns 200 to curl or any other User-Agent, and a missing object returns 404. It was not an R2 permission, path or
+Render-network problem. Fix: the provisioner sends `kunde-maps-search-provisioner/1.0`. A unit test reproduces the block.
+
+### Manual recovery
+1. Actions -> "Build Kazakhstan search index" (manual) produces the artifact (retained 3 days).
+2. Actions -> "Publish Kazakhstan search index to R2" with the successful build run ID. It verifies, uploads to R2,
+   verifies anonymous download with the real provisioner, and mirrors to a GitHub Release `search-index-<run>`.
+3. Update the Render env vars (`MAPS_SEARCH_INDEX_URL`, `..._FALLBACK_URL`, `..._SHA256`) to the new run and deploy.
+
+The index is OSM-derived (ODbL); attribution: (c) OpenStreetMap contributors. Provenance is published beside each index.
