@@ -95,7 +95,7 @@
           ""
         ],
         "text-font": [
-          "Noto Sans Regular"
+          "Open Sans Regular"
         ],
         "text-size": [
           "interpolate",
@@ -138,7 +138,7 @@
           ""
         ],
         "text-font": [
-          "Noto Sans Regular"
+          "Open Sans Regular"
         ],
         "text-size": [
           "interpolate",
@@ -161,5 +161,6 @@
         "text-halo-width": 2
       }
     }
-  ]
+  ],
+  "glyphs": "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf"
 }
