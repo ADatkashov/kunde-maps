@@ -1,0 +1,24 @@
+name: Terraform validate
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - name: Format
+        run: terraform fmt -check -recursive infrastructure/terraform
+      - name: Init without remote state
+        run: terraform -chdir=infrastructure/terraform/environments/dev init -backend=false -input=false
+      - name: Validate
+        run: terraform -chdir=infrastructure/terraform/environments/dev validate -no-color
+      - name: Safety policy
+        run: |
+          if grep -R -E 'plan[[:space:]]*=[[:space:]]*"(starter|standard|pro)"' infrastructure/terraform; then exit 1; fi
+          if grep -R -E '(^|[[:space:]])(terraform[[:space:]]+apply|terraform[[:space:]]+destroy)' .github/workflows; then exit 1; fi
