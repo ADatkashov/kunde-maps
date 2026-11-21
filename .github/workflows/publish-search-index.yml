@@ -1,5 +1,8 @@
 name: Publish Kazakhstan search index to R2
 on:
+  push:
+    paths:
+      - '.github/workflows/publish-search-index.yml'
   workflow_run:
     workflows: ['Build Kazakhstan search index']
     types: [completed]
@@ -15,7 +18,7 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -31,7 +34,7 @@ jobs:
       - name: Download index from successful build
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.run_id || github.event.workflow_run.id }}
+          RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.run_id || github.event_name == 'workflow_run' && github.event.workflow_run.id || '44930606981' }}
         run: |
           set -euo pipefail
           case "$RUN_ID" in *[!0-9]*|'') echo "Invalid run ID"; exit 1;; esac
@@ -60,7 +63,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
-          RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.run_id || github.event.workflow_run.id }}
+          RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.run_id || github.event_name == 'workflow_run' && github.event.workflow_run.id || '44930606981' }}
         run: |
           set -euo pipefail
           python3 -m pip install 'awscli>=1.35,<2'
