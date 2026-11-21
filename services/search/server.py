@@ -39,7 +39,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path == "/health":
-            ready = DB_PATH.is_file()\n            self.reply(200 if ready else 503, {"status": "ok" if ready else "not_ready", "index_ready": ready})
+            ready = DB_PATH.is_file()
+            self.reply(200 if ready else 503, {"status": "ok" if ready else "not_ready", "index_ready": ready})
             return
         if parsed.path != "/v1/search":
             self.reply(404, {"error": "not_found"})
