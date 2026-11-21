@@ -1,0 +1,28 @@
+name: Chromium map smoke
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start Render preview image
+        run: |
+          docker build -f infrastructure/maps/Dockerfile -t kunde-maps-browser:ci .
+          docker run -d --name kunde-maps-browser -p 127.0.0.1:18080:80 kunde-maps-browser:ci
+      - name: Install browser test dependencies
+        run: |
+          npm install --no-save --no-package-lock playwright@1.58.2
+          npx playwright install --with-deps chromium
+      - name: Chromium smoke
+        run: node scripts/test-map-chromium.js
+      - name: Container logs
+        if: always()
+        run: docker logs kunde-maps-browser || true
+      - name: Cleanup
+        if: always()
+        run: docker rm -f kunde-maps-browser || true
