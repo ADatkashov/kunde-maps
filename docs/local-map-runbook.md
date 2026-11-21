@@ -9,7 +9,13 @@ Run `bash scripts/build-kazakhstan-tiles.sh`. This downloads Geofabrik's Kazakhs
 ## Start local map
 Copy `apps/web/config.example.json` to `apps/web/config.json`, changing `styleUrl` to `http://localhost:8080/style.json`. Then run `docker compose -f infrastructure/maps/docker-compose.yml up -d` and open http://localhost:8080.
 
-The style's PMTiles URL is currently hardcoded to localhost:8080 for local proof of concept. For any remote host, replace with the licensed origin URL and configure CORS, TLS, CDN and appropriate cache/range request handling.
+The style's local PMTiles URL is rewritten to the current origin automatically. For a remote archive, set `tileUrl` in the deployed `config.json` without modifying the style or rebuilding the image, for example:
+
+```json
+{"styleUrl":"/style.json","tileUrl":"https://tiles.example.com/kazakhstan.pmtiles"}
+```
+
+The URL above is an example, **not a deployed endpoint**. The tile host must serve HTTPS, support byte-range requests (206 and `Content-Range`), and allow the web origin via CORS. For cross-origin JavaScript to inspect the header, include `Access-Control-Expose-Headers: Content-Range`. Ensure the host allows `Range` in CORS preflight where applicable. The app now probes both local and remote archives before rendering. Never use a private signed URL in a public `config.json` unless intentional.
 
 ## Verify
 - `curl -I http://localhost:8080/style.json` returns 200.
