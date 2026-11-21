@@ -1,0 +1,47 @@
+name: Build Kazakhstan search index
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install OSM PBF parser
+        run: python -m pip install 'osmium>=4,<5'
+      - name: Download Kazakhstan OSM extract and checksum
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/kunde-osm
+          curl --fail --location --retry 3 --output /tmp/kunde-osm/kazakhstan.osm.pbf https://download.geofabrik.de/asia/kazakhstan-latest.osm.pbf
+          curl --fail --location --retry 3 --output /tmp/kunde-osm/kazakhstan.osm.pbf.md5 https://download.geofabrik.de/asia/kazakhstan-latest.osm.pbf.md5
+          cd /tmp/kunde-osm
+          # Geofabrik checksum may use its upstream filename.
+          expected="$(awk '{print $1}' kazakhstan.osm.pbf.md5)"
+          actual="$(md5sum kazakhstan.osm.pbf | awk '{print $1}')"
+          test "$expected" = "$actual"
+          sha256sum kazakhstan.osm.pbf > source.sha256
+      - name: Extract and index search points
+        run: |
+          set -euo pipefail
+          python services/search/extract_osm.py /tmp/kunde-osm/kazakhstan.osm.pbf /tmp/kunde-osm/points.geojsonl
+          python services/search/build_index.py /tmp/kunde-osm/points.geojsonl /tmp/kunde-osm/kazakhstan-search.sqlite3
+          python -m unittest discover -s services/search -p 'test_*.py' -v
+          sha256sum /tmp/kunde-osm/kazakhstan-search.sqlite3 > /tmp/kunde-osm/index.sha256
+          printf 'Source: Geofabrik Kazakhstan OSM extract (ODbL)\n' > /tmp/kunde-osm/PROVENANCE.txt
+          date -u '+Built UTC: %Y-%m-%dT%H:%M:%SZ' >> /tmp/kunde-osm/PROVENANCE.txt
+          cat /tmp/kunde-osm/source.sha256 >> /tmp/kunde-osm/PROVENANCE.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kazakhstan-search-index
+          path: |
+            /tmp/kunde-osm/kazakhstan-search.sqlite3
+            /tmp/kunde-osm/index.sha256
+            /tmp/kunde-osm/PROVENANCE.txt
+          retention-days: 3
+          compression-level: 0
