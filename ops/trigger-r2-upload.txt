@@ -1,1 +1,3 @@
 Upload verified Kazakhstan PMTiles artifact from successful Actions run 44918803010 to R2 bucket kunde-maps-tiles.
+
+Retry upload and configure R2 CORS for Render DEV.
