@@ -18,6 +18,8 @@ jobs:
         run: terraform -chdir=infrastructure/terraform/environments/dev init -backend=false -input=false
       - name: Validate
         run: terraform -chdir=infrastructure/terraform/environments/dev validate -no-color
+      - name: Test plan safety gate
+        run: python3 scripts/ci/test_maps_plan.py
       - name: Safety policy
         run: |
           if grep -R -E 'plan[[:space:]]*=[[:space:]]*"(starter|standard|pro)"' infrastructure/terraform; then exit 1; fi
