@@ -3,11 +3,11 @@ terraform {
   cloud {}
   required_providers {
     render = {
-      source = "render-oss/render"
+      source  = "render-oss/render"
       version = "1.9.1"
     }
     neon = {
-      source = "kislerdm/neon"
+      source  = "kislerdm/neon"
       version = "0.18.0"
     }
   }
