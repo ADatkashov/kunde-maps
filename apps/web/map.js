@@ -149,35 +149,70 @@
     const searchForm = document.getElementById('map-search');
     const searchQuery = document.getElementById('search-query');
     const searchResults = document.getElementById('search-results');
-    // Search only currently loaded vector tiles. A country-wide address index is a separate milestone.
+    // Preview search: only features in loaded vector tiles, not an address geocoder.
+    const normalizeName = value => String(value || '').toLocaleLowerCase('ru').trim();
+    const nearestPoint = (geometry, center) => {
+      if (!geometry || !geometry.coordinates) return null;
+      const lines = [];
+      if (geometry.type === 'Point') lines.push([geometry.coordinates]);
+      else if (geometry.type === 'MultiPoint' || geometry.type === 'LineString') lines.push(geometry.coordinates);
+      else if (geometry.type === 'MultiLineString' || geometry.type === 'Polygon') lines.push(...geometry.coordinates);
+      else if (geometry.type === 'MultiPolygon') {
+        for (const polygon of geometry.coordinates) lines.push(...polygon);
+      }
+      const scale = Math.max(0.1, Math.cos(center.lat * Math.PI / 180));
+      const project = p => [(p[0] - center.lng) * scale, p[1] - center.lat];
+      let best = null;
+      let bestDistance = Infinity;
+      for (const line of lines) {
+        for (let i = 0; i < line.length; i++) {
+          const start = line[i];
+          if (!Array.isArray(start) || !Number.isFinite(start[0]) || !Number.isFinite(start[1])) continue;
+          let candidate = start;
+          if (i + 1 < line.length) {
+            const end = line[i + 1];
+            if (Array.isArray(end) && Number.isFinite(end[0]) && Number.isFinite(end[1])) {
+              const p = project(start), q = project(end);
+              const dx = q[0] - p[0], dy = q[1] - p[1];
+              const length2 = dx * dx + dy * dy;
+              const t = length2 ? Math.max(0, Math.min(1, -(p[0] * dx + p[1] * dy) / length2)) : 0;
+              candidate = [start[0] + (end[0] - start[0]) * t, start[1] + (end[1] - start[1]) * t];
+            }
+          }
+          const [x, y] = project(candidate);
+          const distance = x * x + y * y;
+          if (distance < bestDistance) { bestDistance = distance; best = candidate; }
+        }
+      }
+      return best && {point:best, distance:bestDistance};
+    };
     searchForm?.addEventListener('submit', event => {
       event.preventDefault();
       if (!searchQuery || !searchResults) return;
-      const needle = searchQuery.value.trim().toLocaleLowerCase();
+      const needle = normalizeName(searchQuery.value);
       if (needle.length < 2) return;
       searchResults.replaceChildren();
       searchResults.hidden = false;
-      const seen = new Set();
-      const matches = [];
+      const center = map.getCenter();
+      const matchesByName = new Map();
       for (const layer of ['place', 'transportation_name']) {
         for (const feature of map.querySourceFeatures('kunde', {sourceLayer:layer})) {
           const properties = feature.properties || {};
           const names = [properties['name:ru'], properties['name:kk'], properties.name].filter(Boolean);
-          if (!names.some(name => name.toLocaleLowerCase().includes(needle))) continue;
-          const geometry = feature.geometry;
-          if (!geometry || !geometry.coordinates) continue;
-          let point = geometry.coordinates;
-          while (Array.isArray(point) && Array.isArray(point[0])) point = point[0];
-          if (!Array.isArray(point) || !Number.isFinite(point[0]) || !Number.isFinite(point[1])) continue;
+          if (!names.some(name => normalizeName(name).includes(needle))) continue;
+          const nearest = nearestPoint(feature.geometry, center);
+          if (!nearest) continue;
           const name = properties['name:' + currentLanguage] || properties.name || names[0];
-          const key = name + ':' + point.map(n => n.toFixed(3)).join(',');
-          if (seen.has(key)) continue;
-          seen.add(key);
-          matches.push({name, point});
-          if (matches.length >= 12) break;
+          const key = layer + ':' + normalizeName(name);
+          const rank = (normalizeName(name) === needle ? 0 : normalizeName(name).startsWith(needle) ? 1 : 2);
+          const match = {name, point:nearest.point, distance:nearest.distance, rank};
+          const previous = matchesByName.get(key);
+          if (!previous || match.distance < previous.distance) matchesByName.set(key, match);
         }
-        if (matches.length >= 12) break;
       }
+      const matches = [...matchesByName.values()]
+        .sort((a, b) => a.rank - b.rank || a.distance - b.distance)
+        .slice(0, 10);
       if (!matches.length) {
         searchResults.textContent = 'В загруженной области совпадений нет. Переместите карту и попробуйте снова.';
         return;
@@ -195,6 +230,7 @@
             selectionTitle.textContent = match.name;
             selectionCoords.textContent = match.point[1].toFixed(5) + ', ' + match.point[0].toFixed(5);
           }
+          if (coords) coords.textContent = match.point[1].toFixed(5) + ', ' + match.point[0].toFixed(5);
           searchResults.hidden = true;
           status.textContent = 'Найдено на карте: ' + match.name;
         });
