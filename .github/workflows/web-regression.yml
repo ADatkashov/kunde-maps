@@ -1,0 +1,51 @@
+name: Web map regression checks
+on:
+  push:
+    paths:
+      - 'apps/web/**'
+      - 'infrastructure/maps/**'
+      - '.github/workflows/web-regression.yml'
+  pull_request:
+    paths:
+      - 'apps/web/**'
+      - 'infrastructure/maps/**'
+      - '.github/workflows/web-regression.yml'
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate JavaScript syntax
+        run: node --check apps/web/map.js
+      - name: Validate map style and HTML references
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          style = json.loads(Path('apps/web/style.json').read_text())
+          assert style.get('version') == 8
+          assert 'kunde' in style.get('sources', {})
+          html = Path('apps/web/index.html').read_text()
+          assert 'map.js' in html and 'ui.css' in html
+          assert 'map-search' in html and 'search-results' in html
+          print('Map static checks OK')
+          PY
+      - name: Validate POSIX startup scripts
+        run: |
+          sh -n infrastructure/maps/40-configure-tiles.sh
+      - name: Verify runtime config output
+        run: |
+          set -eu
+          mkdir -p /srv/kunde-web
+          MAPS_TILE_URL=https://example.com/kazakhstan.pmtiles sh infrastructure/maps/40-configure-tiles.sh
+          python3 - <<'PY'
+          import json
+          with open('/srv/kunde-web/config.json') as f:
+              data=json.load(f)
+          assert data['styleUrl'] == '/style.json'
+          assert data['tileUrl'] == 'https://example.com/kazakhstan.pmtiles'
+          assert 'searchUrl' not in data
+          print('Runtime config OK')
+          PY
