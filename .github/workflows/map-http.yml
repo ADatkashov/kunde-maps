@@ -1,0 +1,38 @@
+name: Map HTTP smoke
+on:
+  push:
+  pull_request:
+jobs:
+  http:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Docker Compose
+        run: docker compose -f infrastructure/maps/docker-compose.yml config --quiet
+      - name: Start preview web server
+        run: |
+          cp apps/web/config.example.json apps/web/config.json
+          mkdir -p data/tiles
+          # Small binary fixture tests HTTP Range semantics, not PMTiles validity.
+          python3 -c 'from pathlib import Path; Path("data/tiles/range-fixture.pmtiles").write_bytes(bytes(range(64)))'
+          docker compose -f infrastructure/maps/docker-compose.yml up -d
+      - name: HTTP smoke
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if curl -fsS http://127.0.0.1:8080/ >/dev/null; then break; fi
+            sleep 2
+          done
+          bash scripts/test-local-map.sh
+          status=$(curl -sS -o /tmp/range-body -D /tmp/range-headers -w '%{http_code}' -H 'Range: bytes=0-15' http://127.0.0.1:8080/tiles/range-fixture.pmtiles)
+          test "$status" = 206
+          test "$(wc -c </tmp/range-body)" -eq 16
+          grep -qi '^content-range: bytes 0-15/64' /tmp/range-headers
+          echo "Range HTTP smoke OK (fixture is not a real PMTiles archive)"
+      - name: Container logs
+        if: always()
+        run: docker compose -f infrastructure/maps/docker-compose.yml logs --no-color
+      - name: Stop containers
+        if: always()
+        run: docker compose -f infrastructure/maps/docker-compose.yml down

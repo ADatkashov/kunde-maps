@@ -1,0 +1,17 @@
+name: Foundation checks
+on:
+  push:
+  pull_request:
+jobs:
+  repository:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify foundation files
+        run: |
+          test -s README.md
+          test -s AGENTS.md
+          test -s docs/architecture.md
+          test -s docs/roadmap.md
+          test -s LICENSE
+          ! grep -R -E '(sk-proj-[A-Za-z0-9]+|BEGIN (RSA |OPENSSH )?PRIVATE KEY)' README.md AGENTS.md docs || exit 1

@@ -1,0 +1,63 @@
+name: Render image smoke
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the exact Render Dockerfile
+        run: docker build -f infrastructure/maps/Dockerfile -t kunde-maps-render:ci .
+      - name: Run the Render image
+        run: docker run -d --name kunde-maps-render-ci -p 127.0.0.1:18080:80 kunde-maps-render:ci
+      - name: Verify HTTP and default configuration
+        run: |
+          set -euo pipefail
+          for i in 1 2 3 4 5; do
+            if curl -fsS http://127.0.0.1:18080/ >/dev/null; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:18080/ | grep -q 'KUNDE Maps'
+          curl -fsS http://127.0.0.1:18080/style.json | python3 -c 'import json,sys; assert json.load(sys.stdin)["version"] == 8'
+          curl -fsS http://127.0.0.1:18080/config.json | python3 -c 'import json,sys; assert json.load(sys.stdin)["styleUrl"] == "/style.json"'
+          echo 'Render container HTTP smoke: OK (map tiles not included)'
+      - name: Assert preview is not falsely marked ready
+        run: |
+          set +e
+          python3 scripts/check-deployment.py http://127.0.0.1:18080
+          status=$?
+          set -e
+          test "$status" -eq 2 || { echo "Expected preview-only status 2, got $status"; exit 1; }
+
+      - name: Validate runtime tile URL injection
+        run: |
+          set -euo pipefail
+          docker run -d --name kunde-maps-configured-ci -p 127.0.0.1:18081:80 \
+            -e MAPS_TILE_URL=https://tiles.example.com/kazakhstan.pmtiles \
+            kunde-maps-render:ci
+          trap 'docker rm -f kunde-maps-configured-ci >/dev/null 2>&1 || true' EXIT
+          for i in 1 2 3 4 5; do
+            if curl -fsS http://127.0.0.1:18081/config.json >/tmp/maps-config.json; then break; fi
+            sleep 2
+          done
+          python3 -c 'import json; c=json.load(open("/tmp/maps-config.json")); assert c == {"styleUrl":"/style.json","tileUrl":"https://tiles.example.com/kazakhstan.pmtiles"}, c'
+          echo 'Runtime tile URL injection: OK'
+
+      - name: Reject unsafe tile URL
+        run: |
+          set -euo pipefail
+          if docker run --rm -e 'MAPS_TILE_URL=http://insecure.example.com/map.pmtiles' kunde-maps-render:ci \
+            /bin/sh /docker-entrypoint.d/40-configure-tiles.sh; then
+            echo 'Unsafe URL unexpectedly accepted' >&2
+            exit 1
+          fi
+          echo 'Unsafe tile URL rejected: OK'
+      - name: Container logs
+        if: always()
+        run: docker logs kunde-maps-render-ci || true
+      - name: Stop container
+        if: always()
+        run: docker rm -f kunde-maps-render-ci || true
