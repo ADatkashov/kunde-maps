@@ -1,0 +1,3 @@
+First Kazakhstan PMTiles build request.
+Triggered after foundation PR #1 merged and CI passed.
+This file is an explicit one-off CI trigger, not a published map archive.
