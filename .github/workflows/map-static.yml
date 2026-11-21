@@ -1,0 +1,19 @@
+name: Map static validation
+on:
+  push:
+  pull_request:
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate map style and wiring
+        run: python3 scripts/validate-foundation.py
+      - name: Validate JSON
+        run: |
+          python3 -m json.tool apps/web/style.json >/dev/null
+          python3 -m json.tool apps/web/config.example.json >/dev/null
+      - name: Check shell syntax
+        run: bash -n scripts/build-kazakhstan-tiles.sh
