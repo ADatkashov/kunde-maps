@@ -30,10 +30,11 @@ DEV frontend.
 
 ## Before deployment
 
-1. Implement and benchmark a **reproducible OSM PBF → searchable point data**
-   ingestion pipeline, including streets, POIs and house numbers. This first
-   importer accepts point geometries only; ways/polygons need a correct
-   representative point and provenance.
+1. Run and benchmark the new **OSM PBF → GeoJSONL → SQLite FTS5** pipeline
+   via the manual GitHub workflow `.github/workflows/build-search-index.yml`.
+   `extract_osm.py` processes nodes and ways, using approximate way coordinates;
+   relations, entrances, address completeness and exact building geometry
+   still need dedicated validation. Generated artifacts expire after 3 days.
 2. Build and version a real Almaty/Kazakhstan index and store it persistently.
 3. Test multilingual search, transliteration, ranking, address precision,
    rate limits, and response time on realistic datasets.
@@ -43,3 +44,15 @@ DEV frontend.
 
 Do not describe this prototype as a production geocoder or expose it without
 rate limiting and deployment safeguards.
+
+## Kazakhstan index workflow
+
+Open GitHub Actions → **Build Kazakhstan search index** → Run workflow.
+The job downloads the Geofabrik Kazakhstan PBF and its published MD5, checks
+integrity, extracts named OSM nodes/ways, builds an FTS5 database and uploads
+`kazakhstan-search-index` with provenance and SHA-256. It does not deploy or
+publish the database. Large PBF processing may require a larger runner or
+split-by-city processing; successful completion is not yet confirmed.
+
+The code is a proof of concept. Do not connect it to public traffic until
+index quality, licensing, security and rate limiting have been reviewed.
