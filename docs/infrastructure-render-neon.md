@@ -16,3 +16,7 @@ Adapted from the **separate** ADatkashov/kunde DEV Terraform layout, with pinned
 5. Apply only after the owner has approved the plan and target Render workspace. Do not import or modify existing KUNDE resources.
 
 **Known limitation:** Render serves a preview shell, not a full map: PMTiles have not been generated or uploaded. The current style references localhost and must be switched to an authorized HTTPS tile host before remote map rendering. Neon is provisioned for future geocoding/places; the current static web service does not use it. Render free tier may consume shared workspace instance-hours. Review the plan and quotas before apply.
+
+## Tile hosting configuration (after a real archive exists)
+
+The Docker image reads optional `MAPS_TILE_URL` at startup and publishes it as `tileUrl` in `/config.json`. This allows changing the public archive URL via a Render environment variable and restarting the service, without rebuilding the image. The value must be a **public HTTPS** URL ending in `.pmtiles`; do not use private or signed credentials in this variable because `config.json` is public. If unset, the service remains a preview shell and intentionally reports missing tiles. An external host must support HTTP 206 byte ranges and CORS with `Content-Range` exposed. Setting the URL alone does not prove the archive is valid or the map renders.
