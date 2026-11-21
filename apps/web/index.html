@@ -13,6 +13,11 @@
   <div class="brand"><span class="brand-mark">K</span><div><strong>KUNDE <span>Maps</span></strong><small>Алматы · Казахстан</small></div></div>
   <div class="top-actions"><button id="language" class="location-button lang-button" type="button" aria-label="Переключить язык подписей">ҚАЗ</button><button id="locate" class="location-button" type="button" aria-label="Показать моё местоположение" title="Моё местоположение">◎</button></div>
 </div>
+<form id="map-search" class="search-panel" role="search">
+  <label for="search-query">Поиск на карте</label>
+  <div class="search-row"><input id="search-query" type="search" placeholder="Улица или район на карте" minlength="2" maxlength="100" autocomplete="off" required><button type="submit">Найти</button></div>
+  <div id="search-results" class="search-results" aria-live="polite" hidden></div>
+</form>
 <div class="bottom-panel">
   <div id="selection" class="selection" hidden><strong id="selection-title">Выбранная точка</strong><span id="selection-coords"></span><button id="selection-close" type="button" aria-label="Закрыть карточку">✕</button></div>
   <div id="status" role="status" aria-live="polite">Загрузка карты…</div>
