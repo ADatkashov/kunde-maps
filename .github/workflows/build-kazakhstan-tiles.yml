@@ -1,0 +1,34 @@
+name: Build Kazakhstan PMTiles (manual)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - name: Disk capacity check
+        run: |
+          df -h .
+          free -h
+          echo "Manual job: tile generation may exceed GitHub-hosted runner resources."
+          test "$(df -Pk . | awk 'NR==2 {print $4}')" -ge 10485760 || { echo 'At least 10 GiB free disk required'; exit 1; }
+      - name: Build Kazakhstan PMTiles
+        run: bash scripts/build-kazakhstan-tiles.sh
+      - name: Inspect output
+        run: |
+          python3 scripts/verify-pmtiles.py data/tiles/kazakhstan.pmtiles
+          du -h data/tiles/kazakhstan.pmtiles
+          sha256sum data/tiles/kazakhstan.pmtiles | tee data/tiles/kazakhstan.pmtiles.sha256
+      - name: Upload archive (private workflow artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazakhstan-pmtiles
+          path: |
+            data/tiles/kazakhstan.pmtiles
+            data/tiles/kazakhstan.pmtiles.sha256
+          retention-days: 3
+          if-no-files-found: error
+          compression-level: 0
