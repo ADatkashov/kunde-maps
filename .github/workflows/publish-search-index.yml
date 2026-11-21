@@ -41,7 +41,10 @@ jobs:
           gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name kazakhstan-search-index --dir /tmp/kunde-search
           cd /tmp/kunde-search
           # The producer records an absolute /tmp/kunde-osm path; the artifact is
-          # extracted to a different directory in this job. Verify by basename.\n          expected="$(awk 'NR==1 {print $1}' index.sha256)"\n          actual="$(sha256sum kazakhstan-search.sqlite3 | awk '{print $1}')"\n          test -n "$expected" && test "$expected" = "$actual"
+          # extracted to a different directory in this job. Verify by basename.
+          expected="$(awk 'NR==1 {print $1}' index.sha256)"
+          actual="$(sha256sum kazakhstan-search.sqlite3 | awk '{print $1}')"
+          test -n "$expected" && test "$expected" = "$actual"
           python3 - <<'PY'
           import sqlite3
           db = sqlite3.connect('file:kazakhstan-search.sqlite3?mode=ro', uri=True)
