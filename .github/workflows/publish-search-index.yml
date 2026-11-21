@@ -1,0 +1,66 @@
+name: Publish Kazakhstan search index to R2
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Successful Build Kazakhstan search index workflow run ID'
+        required: true
+        type: string
+permissions:
+  actions: read
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify R2 configuration
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          test -n "$R2_ACCOUNT_ID"
+          test -n "$R2_ACCESS_KEY_ID"
+          test -n "$R2_SECRET_ACCESS_KEY"
+      - name: Download index from successful build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          set -euo pipefail
+          case "$RUN_ID" in *[!0-9]*|'') echo "Invalid run ID"; exit 1;; esac
+          conclusion="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq '.conclusion')"
+          test "$conclusion" = success
+          mkdir -p /tmp/kunde-search
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name kazakhstan-search-index --dir /tmp/kunde-search
+          cd /tmp/kunde-search
+          sha256sum -c index.sha256
+          python3 - <<'PY'
+          import sqlite3
+          db = sqlite3.connect('file:kazakhstan-search.sqlite3?mode=ro', uri=True)
+          assert db.execute('PRAGMA quick_check').fetchone()[0] == 'ok'
+          count = db.execute('SELECT count(*) FROM places').fetchone()[0]
+          assert count > 1000, f'Unexpectedly small index: {count}'
+          print('Verified search places:', count)
+          db.close()
+          PY
+      - name: Publish immutable index to R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          set -euo pipefail
+          python3 -m pip install 'awscli>=1.35,<2'
+          endpoint="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
+          aws --endpoint-url "$endpoint" s3 cp /tmp/kunde-search/kazakhstan-search.sqlite3 \
+            "s3://kunde-maps-tiles/search/kazakhstan-search-$RUN_ID.sqlite3" \
+            --content-type application/vnd.sqlite3
+          aws --endpoint-url "$endpoint" s3 cp /tmp/kunde-search/PROVENANCE.txt \
+            "s3://kunde-maps-tiles/search/kazakhstan-search-$RUN_ID-PROVENANCE.txt" \
+            --content-type text/plain
+          echo "Published immutable index: search/kazakhstan-search-$RUN_ID.sqlite3"
