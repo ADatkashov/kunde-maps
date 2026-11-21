@@ -1,0 +1,20 @@
+{
+  "version": 8,
+  "name": "KUNDE Maps Foundation",
+  "center": [76.945, 43.238],
+  "zoom": 11,
+  "sources": {
+    "kunde": {
+      "type": "vector",
+      "url": "pmtiles://http://localhost:8080/tiles/kazakhstan.pmtiles",
+      "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>"
+    }
+  },
+  "layers": [
+    {"id":"background","type":"background","paint":{"background-color":"#f6f7f4"}},
+    {"id":"landcover","type":"fill","source":"kunde","source-layer":"landcover","paint":{"fill-color":"#dcead9","fill-opacity":0.65}},
+    {"id":"water","type":"fill","source":"kunde","source-layer":"water","paint":{"fill-color":"#a6d7ed"}},
+    {"id":"buildings","type":"fill","source":"kunde","source-layer":"building","paint":{"fill-color":"#d7d6d0","fill-outline-color":"#b8b7b1"}},
+    {"id":"roads","type":"line","source":"kunde","source-layer":"transportation","paint":{"line-color":"#ffffff","line-width":["interpolate",["linear"],["zoom"],5,0.3,11,1.6,15,5]}}
+  ]
+}
