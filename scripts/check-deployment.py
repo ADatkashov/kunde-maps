@@ -38,12 +38,19 @@ def check(origin):
                  if source.get("url", "").startswith("pmtiles://")]
     if not tile_urls:
         raise ValueError("No PMTiles vector source configured")
+    if config.get("tileUrl"):
+        remote = urllib.parse.urlparse(config["tileUrl"])
+        if remote.scheme != "https" or not remote.path.endswith(".pmtiles"):
+            raise ValueError("Remote tileUrl must be an HTTPS .pmtiles URL")
+        tile_urls = [config["tileUrl"] for _ in tile_urls]
     for url in tile_urls:
         if url.startswith("http://localhost:8080/"):
             url = urllib.parse.urljoin(origin, url[len("http://localhost:8080/"):])
         target = urllib.parse.urlparse(url)
-        if target.scheme not in ("http", "https"):
-            raise ValueError("Invalid tile URL")
+        if target.scheme != "https" and not (
+            target.scheme == "http" and target.hostname in ("localhost", "127.0.0.1")
+        ):
+            raise ValueError("Tile URL must use HTTPS except localhost")
         status, headers, data = get(url, {"Range": "bytes=0-15"})
         if status != 206:
             print(f"PREVIEW ONLY: tiles not ready ({status}): {url}")
