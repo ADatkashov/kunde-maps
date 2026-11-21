@@ -25,13 +25,32 @@
         ).href;
       }
     }
+    // Optional HTTPS PMTiles host, configured independently from the static web image.
+    // The style remains local; a published archive can live on object storage/CDN.
+    if (config.tileUrl) {
+      const remote = new URL(config.tileUrl);
+      if (remote.protocol !== 'https:' && !(remote.protocol === 'http:' &&
+          ['localhost', '127.0.0.1'].includes(remote.hostname))) {
+        throw new Error('tileUrl must use HTTPS (except local development)');
+      }
+      if (!remote.pathname.endsWith('.pmtiles')) throw new Error('tileUrl must point to a .pmtiles archive');
+      for (const source of Object.values(style.sources || {})) {
+        if (typeof source.url === 'string' && source.url.startsWith('pmtiles://')) {
+          source.url = 'pmtiles://' + remote.href;
+        }
+      }
+    }
     // A successful style response does not imply that the PMTiles archive exists.
     // Check same-origin archives before creating the map so the preview never
     // reports "loaded" while displaying an empty background.
     for (const source of Object.values(style.sources || {})) {
       if (typeof source.url !== 'string' || !source.url.startsWith('pmtiles://')) continue;
       const tileUrl = new URL(source.url.slice('pmtiles://'.length));
-      if (tileUrl.origin !== window.location.origin) continue;
+      // Validate remote tile hosts too; CORS must expose Content-Range.
+      if (tileUrl.protocol !== 'https:' && !(tileUrl.protocol === 'http:' &&
+          ['localhost', '127.0.0.1'].includes(tileUrl.hostname))) {
+        throw new Error('PMTiles host must use HTTPS');
+      }
       const probe = await fetch(tileUrl.href, {
         method: 'GET',
         headers: { Range: 'bytes=0-15' },
