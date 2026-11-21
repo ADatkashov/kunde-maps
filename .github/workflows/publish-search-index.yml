@@ -14,7 +14,7 @@ on:
         type: string
 permissions:
   actions: read
-  contents: read
+  contents: write
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -100,3 +100,19 @@ jobs:
           curl --fail --location --silent --show-error --max-time 30 --range 0-15 "$base.sqlite3" -o /tmp/sqlite-header
           head -c 15 /tmp/sqlite-header | grep -a -q 'SQLite format 3'
           echo "Public R2 checksum and SQLite URLs verified"
+      - name: Publish verified search index as GitHub Release fallback
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.run_id || github.event_name == 'workflow_run' && github.event.workflow_run.id || '44930606981' }}
+        run: |
+          set -euo pipefail
+          tag="search-index-$RUN_ID"
+          cp /tmp/kunde-search/index.sha256 "/tmp/kunde-search/kazakhstan-search-$RUN_ID.sha256"
+          cp /tmp/kunde-search/kazakhstan-search.sqlite3 "/tmp/kunde-search/kazakhstan-search-$RUN_ID.sqlite3"
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --title "Kazakhstan Search Index $RUN_ID" --notes "Verified OSM-derived search index and SHA256 for KUNDE Maps Search API."
+          fi
+          gh release upload "$tag" --repo "$GITHUB_REPOSITORY" --clobber \
+            "/tmp/kunde-search/kazakhstan-search-$RUN_ID.sqlite3" \
+            "/tmp/kunde-search/kazakhstan-search-$RUN_ID.sha256"
+          echo "Release fallback ready: $tag"
