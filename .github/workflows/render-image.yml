@@ -24,6 +24,14 @@ jobs:
           curl -fsS http://127.0.0.1:18080/style.json | python3 -c 'import json,sys; assert json.load(sys.stdin)["version"] == 8'
           curl -fsS http://127.0.0.1:18080/config.json | python3 -c 'import json,sys; assert json.load(sys.stdin)["styleUrl"] == "/style.json"'
           echo 'Render container HTTP smoke: OK (map tiles not included)'
+      - name: Assert preview is not falsely marked ready
+        run: |
+          set +e
+          python3 scripts/check-deployment.py http://127.0.0.1:18080
+          status=$?
+          set -e
+          test "$status" -eq 2 || { echo "Expected preview-only status 2, got $status"; exit 1; }
+
       - name: Container logs
         if: always()
         run: docker logs kunde-maps-render-ci || true
