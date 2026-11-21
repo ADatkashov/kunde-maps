@@ -186,7 +186,7 @@
       }
       return best && {point:best, distance:bestDistance};
     };
-    searchForm?.addEventListener('submit', event => {
+    searchForm?.addEventListener('submit', async event => {
       event.preventDefault();
       if (!searchQuery || !searchResults) return;
       const needle = normalizeName(searchQuery.value);
@@ -194,6 +194,35 @@
       searchResults.replaceChildren();
       searchResults.hidden = false;
       const center = map.getCenter();
+      let remoteMatches = null;
+      if (config.searchUrl) {
+        try {
+          const endpoint = new URL(config.searchUrl, window.location.href);
+          if (endpoint.protocol !== 'https:' && !(endpoint.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(endpoint.hostname))) {
+            throw new Error('Search API requires HTTPS');
+          }
+          endpoint.searchParams.set('q', searchQuery.value.trim());
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 4000);
+          try {
+            const response = await fetch(endpoint.href, {signal:controller.signal, mode:'cors'});
+            if (!response.ok) throw new Error('Search API HTTP ' + response.status);
+            const payload = await response.json();
+            if (!Array.isArray(payload.results)) throw new Error('Invalid search response');
+            remoteMatches = payload.results
+              .filter(item => item && Number.isFinite(item.lon) && Number.isFinite(item.lat) &&
+                Math.abs(item.lon) <= 180 && Math.abs(item.lat) <= 90)
+              .slice(0, 10)
+              .map(item => ({
+                name: String(item[currentLanguage === 'kk' ? 'name_kk' : 'name_ru'] || item.name || 'Адрес'),
+                point:[item.lon, item.lat], rank:0, distance:0
+              }));
+          } finally { clearTimeout(timeout); }
+        } catch (error) {
+          console.warn('Search API unavailable, using loaded map tiles:', error);
+          status.textContent = 'Сервер поиска недоступен · поиск по открытой карте';
+        }
+      }
       const matchesByName = new Map();
       for (const layer of ['place', 'transportation_name']) {
         for (const feature of map.querySourceFeatures('kunde', {sourceLayer:layer})) {
@@ -210,11 +239,11 @@
           if (!previous || match.distance < previous.distance) matchesByName.set(key, match);
         }
       }
-      const matches = [...matchesByName.values()]
+      const matches = remoteMatches ?? [...matchesByName.values()]
         .sort((a, b) => a.rank - b.rank || a.distance - b.distance)
         .slice(0, 10);
       if (!matches.length) {
-        searchResults.textContent = 'В загруженной области совпадений нет. Переместите карту и попробуйте снова.';
+        searchResults.textContent = remoteMatches ? 'Совпадений не найдено.' : 'В загруженной области совпадений нет. Переместите карту и попробуйте снова.';
         return;
       }
       for (const match of matches) {
