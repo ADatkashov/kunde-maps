@@ -2,6 +2,7 @@
 import json
 import math
 import os
+import re
 import sqlite3
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -17,7 +18,7 @@ def search(db_path, query, limit=MAX_RESULTS):
     if len(query) < 2 or len(query) > 100:
         return []
     # FTS5 prefix search; quote every token to avoid FTS syntax injection.
-    tokens = [token.replace('"', '') for token in query.split() if token.replace('"', '')]
+    tokens = re.findall(r"[^\\W_]+", query, flags=re.UNICODE)
     if not tokens:
         return []
     expression = " AND ".join('"' + token + '"*' for token in tokens[:8])
