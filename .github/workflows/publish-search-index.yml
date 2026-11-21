@@ -89,3 +89,14 @@ jobs:
           echo "Verified R2 index checksum sidecar exists"
           echo "Verified R2 object size: $remote_size bytes"
           echo "Published immutable index and checksum: search/kazakhstan-search-$RUN_ID.sqlite3"
+      - name: Verify public R2 URLs from GitHub runner
+        env:
+          RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.run_id || github.event_name == 'workflow_run' && github.event.workflow_run.id || '44930606981' }}
+        run: |
+          set -euo pipefail
+          base="https://pub-237f2a01acb04791aad25708c16f3d8a.r2.dev/search/kazakhstan-search-$RUN_ID"
+          curl --fail --location --silent --show-error --max-time 30 "$base.sha256" -o /tmp/public-index.sha256
+          test "$(awk 'NR==1 {print length($1)}' /tmp/public-index.sha256)" = 64
+          curl --fail --location --silent --show-error --max-time 30 --range 0-15 "$base.sqlite3" -o /tmp/sqlite-header
+          head -c 15 /tmp/sqlite-header | grep -a -q 'SQLite format 3'
+          echo "Public R2 checksum and SQLite URLs verified"
