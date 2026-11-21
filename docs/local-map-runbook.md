@@ -18,3 +18,9 @@ The style's PMTiles URL is currently hardcoded to localhost:8080 for local proof
 - Browser should show actual roads and buildings in Almaty, no MapLibre errors, and OSM attribution.
 
 This workflow has not yet been executed in CI or on a host. Do not claim tiles exist or the map renders until verified. Never commit PBF/PMTiles files or use unlicensed map data.
+
+## Optional GitHub Actions build
+
+The workflow `.github/workflows/build-kazakhstan-tiles.yml` is **manual only**. GitHub's Actions UI normally requires the workflow file to exist on the default branch before it can be dispatched; merging the workflow is a separate decision from running it. This job downloads the full Kazakhstan OSM extract and invokes Planetiler. GitHub-hosted runner disk, memory, time and artifact-size limits may prevent completion; use a sufficiently sized dedicated runner or build host if so. Do not treat a successful workflow definition check as proof the archive exists.
+
+The archive is uploaded as a short-lived (3-day) GitHub Actions artifact, not committed to Git. Artifacts are not a tile-serving endpoint. A separately provisioned object store or server with HTTPS, byte-range support and appropriate CORS must host the PMTiles file before the map works publicly. Validate archive header, size, checksum, tile layer names and actual browser rendering before release. Avoid exposing infrastructure credentials or raw OSM data through logs.
