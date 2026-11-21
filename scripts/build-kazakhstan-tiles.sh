@@ -15,6 +15,7 @@ echo "Generating vector tiles. Ensure sufficient disk space and RAM."
 docker run --rm -v "$PWD/data:/data" ghcr.io/onthegomap/planetiler:latest \
   --osm-path=/data/osm/kazakhstan-latest.osm.pbf \
   --output=/data/tiles/kazakhstan.pmtiles \
+  --download \
   --force
 python3 scripts/verify-pmtiles.py data/tiles/kazakhstan.pmtiles
 echo "Created data/tiles/kazakhstan.pmtiles (PMTiles v3 header verified)"
