@@ -69,6 +69,32 @@ jobs:
               raise RuntimeError(f"R2 size mismatch: {actual} != {expected}")
           print(f"Uploaded {key} to R2 and verified size: {actual} bytes")
           PY
+      - name: Configure bucket CORS for Render DEV map
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import boto3
+          client = boto3.client(
+              "s3",
+              endpoint_url="https://" + os.environ["R2_ACCOUNT_ID"] + ".r2.cloudflarestorage.com",
+              aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
+              aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+              region_name="auto",
+          )
+          client.put_bucket_cors(
+              Bucket=os.environ["R2_BUCKET"],
+              CORSConfiguration={"CORSRules": [{
+                  "AllowedOrigins": ["https://kunde-maps-web-dev.onrender.com"],
+                  "AllowedMethods": ["GET", "HEAD"],
+                  "AllowedHeaders": ["Range", "*"],
+                  "ExposeHeaders": ["Content-Range", "Content-Length", "Accept-Ranges"],
+                  "MaxAgeSeconds": 3600,
+              }]},
+          )
+          print("R2 CORS configured for KUNDE Maps Render DEV")
+          PY
       - name: Verify public HTTP Range endpoint
         shell: bash
         run: |
