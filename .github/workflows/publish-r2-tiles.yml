@@ -37,7 +37,7 @@ jobs:
           gh run download "$SOURCE_RUN_ID" --repo "${{ github.repository }}" --name kazakhstan-pmtiles --dir /tmp/kunde-maps-r2
           test -s /tmp/kunde-maps-r2/kazakhstan.pmtiles
           cd /tmp/kunde-maps-r2
-          sha256sum -c kazakhstan.pmtiles.sha256
+          sed 's#data/tiles/kazakhstan.pmtiles#kazakhstan.pmtiles#' kazakhstan.pmtiles.sha256 | sha256sum -c -
           python3 "$GITHUB_WORKSPACE/scripts/verify-pmtiles.py" kazakhstan.pmtiles
       - name: Upload archive using S3-compatible API
         shell: bash
@@ -80,6 +80,6 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           header=Path('/tmp/maps-r2-header.bin').read_bytes()
-          assert header[:8] == b'PMTiles\\x03', 'Not a PMTiles v3 archive'
+          assert header[:8] == b'PMTiles\x03', 'Not a PMTiles v3 archive'
           print('R2 public PMTiles range probe: OK')
           PY
