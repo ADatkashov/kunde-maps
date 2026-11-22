@@ -52,10 +52,11 @@ def _distance_km(a_lat, a_lon, b_lat, b_lon):
     return math.hypot(dx, dy)
 
 
-def _fts_rows(connection, tokens, limit):
+def _fts_rows(connection, tokens, limit, version=2):
     expression = " AND ".join('skel : "' + token + '"*' for token in tokens)
+    extra = "p.osm_id, p.category, p.subtype" if version >= 3 else "'' AS osm_id, '' AS category, '' AS subtype"
     return connection.execute(
-        """SELECT p.id, p.name, p.name_ru, p.name_kk, p.name_en, p.alt, p.kind, p.lat, p.lon, p.importance
+        f"""SELECT p.id, p.name, p.name_ru, p.name_kk, p.name_en, p.alt, p.kind, p.lat, p.lon, p.importance, {extra}
            FROM places_fts f JOIN places p ON p.id = f.rowid
            WHERE places_fts MATCH ? ORDER BY p.importance DESC, bm25(places_fts) LIMIT ?""",
         (expression, limit),
@@ -84,19 +85,19 @@ def _edit_distance_at_most_one(a, b):
     return edits + (len(b) - j) + (len(a) - i) <= 1
 
 
-def _search_v2(connection, query, limit, lang, center):
+def _search_v2(connection, query, limit, lang, center, version=2):
     tokens = textnorm.skeleton_tokens(query)[:8]
     if not tokens:
         return []
     full = " ".join(tokens)
-    rows = list(_fts_rows(connection, tokens, CANDIDATES))
+    rows = list(_fts_rows(connection, tokens, CANDIDATES, version))
     names_of = lambda row: [row["name"], row["name_ru"], row["name_kk"], row["name_en"]] + (row["alt"] or "").split(";")
     skeletons_of = {row["id"]: [sk for sk in (textnorm.skeleton(n) for n in names_of(row) if n) if sk] for row in rows}
     # Typo tolerance without a second index: when nothing matches exactly, also try the query without its last
     # letter (Алмата -> almat* reaches Алматы). Candidates within edit distance 1 of the query then rank next to exact.
     if len(tokens[-1]) >= 4 and not any(full in sks for sks in skeletons_of.values()):
         seen = {row["id"] for row in rows}
-        for row in _fts_rows(connection, tokens[:-1] + [tokens[-1][:-1]], CANDIDATES):
+        for row in _fts_rows(connection, tokens[:-1] + [tokens[-1][:-1]], CANDIDATES, version):
             if row["id"] not in seen:
                 rows.append(row)
                 skeletons_of[row["id"]] = [sk for sk in (textnorm.skeleton(n) for n in names_of(row) if n) if sk]
@@ -115,7 +116,14 @@ def _search_v2(connection, query, limit, lang, center):
         ranked.append((score, row["id"], row))
     ranked.sort(key=lambda item: (-item[0], item[1]))
     keys = ("id", "name", "name_ru", "name_kk", "name_en", "kind", "lat", "lon")
-    return [{k: row[k] for k in keys} for _, _, row in ranked[:limit]]
+    results = []
+    for _, _, row in ranked[:limit]:
+        item = {k: row[k] for k in keys}
+        if version >= 3:  # stable id + category let the web app open the full place card (/v1/places/{place_id})
+            item["place_id"] = row["osm_id"] or None
+            item["category"] = row["category"] or None
+        results.append(item)
+    return results
 
 
 def _search_v1(connection, query, limit):
@@ -141,8 +149,9 @@ def search(db_path, query, limit=DEFAULT_LIMIT, lang="ru", center=None):
     connection = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     connection.row_factory = sqlite3.Row
     try:
-        if _schema_version(connection) >= 2:
-            return _search_v2(connection, query, limit, lang if lang in LANGS else "ru", center)
+        version = _schema_version(connection)
+        if version >= 2:
+            return _search_v2(connection, query, limit, lang if lang in LANGS else "ru", center, version)
         return _search_v1(connection, query, limit)
     finally:
         connection.close()

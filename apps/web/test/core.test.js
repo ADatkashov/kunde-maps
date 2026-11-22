@@ -145,8 +145,153 @@ test('config URL parsing accepts https and only localhost over http', () => {
 
 test('place hash round-trips and rejects invalid input', () => {
   const h = core.buildPlaceHash(43.23639, 76.94573, 'Алматы <b>');
-  assert.deepEqual(core.parsePlaceHash(h), {lat: 43.23639, lng: 76.94573, name: 'Алматы <b>'});
+  assert.deepEqual(core.parsePlaceHash(h), {lat: 43.23639, lng: 76.94573, name: 'Алматы <b>', poi: null});
+  const withPoi = core.buildPlaceHash(43.2, 76.9, 'Кафе', 'n123');
+  assert.equal(core.parsePlaceHash(withPoi).poi, 'n123');
+  assert.equal(core.parsePlaceHash('#lat=1&lng=2&poi=n1%27%20OR%201').poi, null, 'invalid poi ids are ignored');
   assert.equal(core.parsePlaceHash('#lat=999&lng=1'), null);
   assert.equal(core.parsePlaceHash('#lat=abc&lng=1'), null);
   assert.equal(core.parsePlaceHash(''), null);
+});
+
+// ---- Places & POI ---------------------------------------------------------------------------------------------------
+const poi = (o = {}) => ({id: 'n10', name: 'Кофейня', name_ru: null, name_kk: null, name_en: null, category: 'cafe', subtype: 'cafe',
+  lat: 43.24, lon: 76.95, address: 'Абая 1', phone: '+7 727 111-22-33', website: 'https://alpha.example.kz', hours: 'Mo-Su 09:00-21:00',
+  brand: null, ...o});
+const okPlaces = places => ({ok: true, status: 200, headers: new Headers(), json: async () => ({places, truncated: false, count: places.length})});
+const at = iso => new Date(iso); // Almaty is UTC+5: 04:00Z = 09:00 local
+
+test('places client builds viewport and nearby URLs with rounded, validated parameters', async () => {
+  const urls = [];
+  const c = core.createPlacesClient({baseUrl: 'https://s.test', fetchImpl: async url => { urls.push(url); return okPlaces([poi()]); }, sleep: async () => {}});
+  const r = await c.viewport({bbox: {west: 76.9, south: 43.2, east: 77.0, north: 43.3}, categories: ['cafe', 'nope', 'pharmacy'], center: {lat: 43.2501, lng: 76.9499}});
+  assert.equal(urls[0], 'https://s.test/v1/places?bbox=76.9000,43.2000,77.0000,43.3000&limit=150&category=cafe,pharmacy&lat=43.250&lon=76.950');
+  assert.equal(r.places.length, 1);
+  await c.nearby({lat: 43.238912, lon: 76.889709, radius: 1500.4, categories: []});
+  assert.equal(urls[1], 'https://s.test/v1/places?lat=43.239&lon=76.890&radius=1500&limit=60', 'position is rounded to ~100 m');
+  await c.viewport({bbox: {west: 76.9, south: 43.2, east: 77.0, north: 43.3}, categories: ['cafe', 'pharmacy'], center: {lat: 43.2501, lng: 76.9499}});
+  assert.equal(urls.length, 2, 'identical viewport requests are cached');
+});
+
+test('places client rejects malformed items and bad ids; maps errors', async () => {
+  const bad = [poi({category: 'weapons'}), poi({lat: 999}), {category: 'cafe'}, null, poi({website: 'javascript:alert(1)'})];
+  const c = core.createPlacesClient({baseUrl: 'https://s.test', fetchImpl: async () => okPlaces(bad), sleep: async () => {}});
+  const {places} = await c.nearby({lat: 1, lon: 1});
+  assert.equal(places.length, 1, 'only the item with a dangerous website survives, with the website removed');
+  assert.equal(places[0].website, null);
+  await assert.rejects(c.details("n1' OR 1=1"), {code: 'bad_request'});
+  const notFound = core.createPlacesClient({baseUrl: 'https://s.test', fetchImpl: async () => ({ok: false, status: 404, headers: new Headers(), json: async () => ({})})});
+  await assert.rejects(notFound.details('n5'), {code: 'not_found'});
+  await assert.rejects(core.createPlacesClient({baseUrl: ''}).viewport({bbox: {west: 1, south: 1, east: 2, north: 2}}), {code: 'not_configured'});
+  const limited = core.createPlacesClient({baseUrl: 'https://s.test', fetchImpl: async () => ({ok: false, status: 429, headers: new Headers({'Retry-After': '7'}), json: async () => ({})})});
+  await assert.rejects(limited.nearby({lat: 1, lon: 1}), e => e.code === 'rate_limited' && e.retryAfter === 7);
+});
+
+test('website and phone sanitizers (defence in depth)', () => {
+  assert.equal(core.safeWebsite('https://example.kz/a?b=1'), 'https://example.kz/a?b=1');
+  for (const bad of ['javascript:alert(1)', 'data:text/html,x', 'ftp://x.kz', 'https://u:p@x.kz', '//x.kz', 'x.kz', '', null, 'https://' + 'a'.repeat(400)]) {
+    assert.equal(core.safeWebsite(bad), null, String(bad));
+  }
+  assert.equal(core.telHref('+7 (727) 111-22-33; +7 701 000 00 00'), 'tel:+77271112233');
+  assert.equal(core.telHref('8 7172 22 22 22'), 'tel:87172222222');
+  for (const bad of ['', 'call', '<b>1234567</b>', '12', null]) assert.equal(core.telHref(bad), null, String(bad));
+});
+
+test('place titles never invent names and categories have labels in every language', () => {
+  const atm = core.validPoi(poi({name: null, category: 'bank', subtype: 'atm'}));
+  assert.equal(core.poiTitle(atm, 'ru'), 'Банкомат', 'unnamed ATM is shown by its kind, not with an invented name');
+  assert.equal(core.poiTitle(core.validPoi(poi({name: null, category: 'cafe', subtype: 'exotic_tag'})), 'en'), 'Cafes', 'unknown subtype falls back to the category');
+  assert.equal(core.poiTitle(core.validPoi(poi({name: null, category: 'parking', subtype: 'parking'})), 'en'), 'Parking');
+  const named = core.validPoi(poi({name: 'Alpha', name_ru: 'Альфа', name_kk: 'Альфа қ.'}));
+  assert.deepEqual(['ru', 'kk', 'en'].map(l => core.poiTitle(named, l)), ['Альфа', 'Альфа қ.', 'Alpha']);
+  for (const id of core.CATEGORIES) {
+    for (const lang of ['ru', 'kk', 'en']) assert.ok(core.categoryLabel(id, lang).length > 1, id + lang);
+    assert.match(core.CATEGORY_COLORS[id], /^#[0-9a-f]{6}$/);
+  }
+  assert.equal(new Set(Object.values(core.CATEGORY_COLORS)).size, core.CATEGORIES.length, 'every category has its own colour');
+});
+
+test('distance formatting and external route link', () => {
+  assert.equal(core.formatDistance(0, 'ru'), '0 м');
+  assert.equal(core.formatDistance(347, 'ru'), '350 м');
+  assert.equal(core.formatDistance(1234, 'en'), '1.2 km');
+  assert.equal(core.formatDistance(15500, 'kk'), '16 км');
+  assert.equal(core.formatDistance(NaN, 'ru'), '');
+  assert.equal(core.routeUrl(43.23639, 76.94573), 'https://www.openstreetmap.org/directions?from=&to=43.23639%2C76.94573');
+});
+
+test('opening hours: open/closed/until/next, 24/7 and weekly wrap', () => {
+  const h = 'Mo-Fr 09:00-18:00; Sa 10:00-14:00; Su off';
+  // Almaty = UTC+5. 2026-11-23 is a Monday.
+  assert.deepEqual(core.openStatus(h, at('2026-11-23T04:00:00Z')), {state: 'open', allDay: false, until: '18:00'});      // Mon 09:00
+  assert.deepEqual(core.openStatus(h, at('2026-11-23T03:59:00Z')).next, {offset: 0, time: '09:00', day: 0});              // Mon 08:59
+  assert.equal(core.openStatus(h, at('2026-11-23T13:00:00Z')).state, 'closed');                                            // Mon 18:00 sharp: closed
+  assert.equal(core.openStatus(h, at('2026-11-21T07:00:00Z')).until, '14:00');                                             // Sat 12:00
+  const satEvening = core.openStatus(h, at('2026-11-21T10:00:00Z'));                                                       // Sat 15:00
+  assert.deepEqual([satEvening.state, satEvening.next.offset, satEvening.next.day, satEvening.next.time], ['closed', 2, 0, '09:00']);
+  assert.equal(core.openStatus(h, at('2026-11-22T07:00:00Z')).state, 'closed');                                            // Sunday
+  assert.deepEqual(core.openStatus('24/7', at('2026-11-22T07:00:00Z')), {state: 'open', allDay: true});
+  assert.equal(core.openStatus('Sa-Mo 10:00-12:00', at('2026-11-22T06:00:00Z')).state, 'open', 'Sa-Mo wraps over Sunday (Sun 11:00)');
+  assert.equal(core.openStatus('Sa-Mo 10:00-12:00', at('2026-11-24T06:00:00Z')).state, 'closed', 'Tuesday is outside Sa-Mo');
+});
+
+test('opening hours: overnight ranges, several ranges per day and rule overrides', () => {
+  const night = 'Mo-Su 22:00-02:00';
+  assert.deepEqual(core.openStatus(night, at('2026-11-23T20:00:00Z')), {state: 'open', allDay: false, until: '02:00'});     // Tue 01:00 (spill from Mon)
+  assert.deepEqual(core.openStatus(night, at('2026-11-23T18:00:00Z')).state, 'open');                                       // Mon 23:00
+  assert.deepEqual(core.openStatus(night, at('2026-11-24T07:00:00Z')).next, {offset: 0, time: '22:00', day: 1});           // Tue 12:00
+  const lunch = 'Mo-Fr 09:00-13:00,14:00-18:00';
+  assert.deepEqual(core.openStatus(lunch, at('2026-11-23T08:30:00Z')).next, {offset: 0, time: '14:00', day: 0});           // Mon 13:30
+  assert.equal(core.openStatus(lunch, at('2026-11-23T10:00:00Z')).until, '18:00');                                          // Mon 15:00
+  const override = 'Mo-Su 09:00-21:00; Fr 10:00-14:00';
+  assert.equal(core.openStatus(override, at('2026-11-27T15:00:00Z')).state, 'closed', 'later rule overrides Friday (Fri 20:00)');
+  assert.equal(core.openStatus(override, at('2026-11-28T15:00:00Z')).state, 'open', 'Saturday keeps the general rule');
+  assert.equal(core.openStatus('Mo-Fr 09:00-24:00', at('2026-11-23T18:30:00Z')).until, '00:00');
+});
+
+test('opening hours: anything not understood is unknown, never guessed', () => {
+  for (const text of ['Mo-Fr 09:00-18:00; PH off', 'sunrise-sunset', 'Mo-Fr 09:00-18:00 "by appointment"', 'Jan-Mar Mo 09:00-10:00',
+    'Mo[1] 09:00-10:00', 'Mo-Fr 09:00-18:00+', 'week 1-10 Mo 09:00-10:00', 'garbage', '', '   ', null, undefined, 42,
+    '09:00-25:00', '25:00-26:00', '09:60-10:00', 'Mo-Xx 09:00-10:00', '24:00-24:30']) {
+    assert.equal(core.parseOpeningHours(text), null, String(text));
+    assert.equal(core.openStatus(text, at('2026-11-23T04:00:00Z')), null, String(text));
+    assert.equal(core.openLabel(text, 'ru', at('2026-11-23T04:00:00Z')), null, String(text));
+    assert.equal(core.hoursTable(text, 'ru'), null, String(text));
+  }
+});
+
+test('opening hours labels and weekly table are localized', () => {
+  const h = 'Mo-Fr 09:00-18:00; Sa 10:00-14:00; Su off';
+  assert.deepEqual(core.openLabel(h, 'ru', at('2026-11-23T04:00:00Z')), {state: 'open', label: 'Открыто · до 18:00'});
+  assert.deepEqual(core.openLabel(h, 'en', at('2026-11-23T04:00:00Z')), {state: 'open', label: 'Open · until 18:00'});
+  assert.equal(core.openLabel(h, 'kk', at('2026-11-23T04:00:00Z')).label, 'Ашық · 18:00 дейін');
+  assert.equal(core.openLabel(h, 'ru', at('2026-11-23T03:00:00Z')).label, 'Закрыто · откроется в 09:00');
+  assert.equal(core.openLabel(h, 'ru', at('2026-11-21T10:00:00Z')).label, 'Закрыто · откроется Пн в 09:00');
+  assert.equal(core.openLabel('24/7', 'ru').label, 'Круглосуточно');
+  const table = core.hoursTable(h, 'en');
+  assert.deepEqual([table[0], table[5], table[6]], [{day: 'Mon', text: '09:00–18:00'}, {day: 'Sat', text: '10:00–14:00'}, {day: 'Sun', text: null}]);
+});
+
+test('favorites: toggle, key by osm id or coordinates, cap and validation of persisted data', () => {
+  const a = core.validPoi(poi()), b = core.validPoi(poi({id: null, lat: 1, lon: 2}));
+  let r = core.toggleFavorite([], a);
+  assert.equal(r.saved, true);
+  assert.equal(core.isFavorite(r.list, core.validPoi(poi({name: 'renamed'}))), true, 'same osm id = same favorite');
+  r = core.toggleFavorite(core.toggleFavorite(r.list, b).list, a);
+  assert.deepEqual([r.saved, r.list.length], [false, 1]);
+  assert.equal(r.list[0].id, null);
+  assert.deepEqual(Object.keys(r.list[0]).sort(), ['address', 'category', 'id', 'lat', 'lon', 'name', 'nameEn', 'nameKk', 'nameRu', 'subtype'], 'only display fields are stored');
+  let big = [];
+  for (let i = 0; i < 250; i++) big = core.toggleFavorite(big, core.validPoi(poi({id: 'n' + (i + 1)}))).list;
+  assert.equal(big.length, 200);
+  assert.equal(big[0].id, 'n250', 'newest first');
+  const restored = core.parseFavorites(JSON.stringify(big.slice(0, 3)));
+  assert.deepEqual(restored.map(x => x.id), ['n250', 'n249', 'n248']);
+  for (const junk of ['not json', '{}', '[1,2,null]', '[{"category":"cafe"}]', null, '[{"lat":1,"lon":2,"category":"weapons"}]']) assert.deepEqual(core.parseFavorites(junk), [], String(junk));
+});
+
+test('every new UI string exists in all languages', () => {
+  const keys = Object.keys(core.STRINGS.ru);
+  for (const lang of ['kk', 'en']) assert.deepEqual(Object.keys(core.STRINGS[lang]).sort(), keys.slice().sort(), lang);
+  for (const key of ['nearMe', 'openNow', 'route', 'save', 'favorites']) assert.ok(keys.includes(key), key);
 });
