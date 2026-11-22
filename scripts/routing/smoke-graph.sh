@@ -4,7 +4,7 @@
 set -euo pipefail
 dir=$(readlink -f "$1"); img=${VALHALLA_IMAGE:-ghcr.io/gis-ops/docker-valhalla/valhalla:latest}
 name=smoke-valhalla-$$
-chmod -R a+rX "$dir"
+chmod a+r "$dir/valhalla-tiles.tar"
 docker run -d --name "$name" --network host -v "$dir:/data:ro" --entrypoint bash "$img" -lc '
   valhalla_build_config --mjolnir-tile-extract /data/valhalla-tiles.tar --mjolnir-tile-dir /tmp/none --httpd-service-listen "tcp://127.0.0.1:8002" > /tmp/serve.json
   exec valhalla_service /tmp/serve.json 1' > /dev/null

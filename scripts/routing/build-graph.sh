@@ -5,7 +5,7 @@ set -euo pipefail
 pbf=$(readlink -f "$1"); out=$(readlink -f "$2"); source_url=${3:-unknown}
 img=${VALHALLA_IMAGE:-ghcr.io/gis-ops/docker-valhalla/valhalla:latest}
 work=$out/work; mkdir -p "$work"; cp "$pbf" "$work/data.osm.pbf"; chmod -R a+rwX "$work"
-docker run --rm --network none -v "$work:/data" --entrypoint bash "$img" -lc '
+docker run --rm --network none --user "$(id -u):$(id -g)" -v "$work:/data" --entrypoint bash "$img" -lc '
   set -euo pipefail
   valhalla_build_config --mjolnir-tile-dir /data/tiles --mjolnir-tile-extract /data/valhalla-tiles.tar > /data/build.json
   valhalla_build_tiles -c /data/build.json /data/data.osm.pbf

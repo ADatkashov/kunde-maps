@@ -1,0 +1,42 @@
+name: Routing API tests
+on:
+  pull_request:
+    paths:
+      - 'services/routing/**'
+      - 'services/search/protection.py'
+      - 'services/search/apikeys.py'
+      - 'services/search/provision_index.py'
+      - 'infrastructure/routing/**'
+      - '.github/workflows/routing-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'services/routing/**'
+      - 'infrastructure/routing/**'
+permissions:
+  contents: read
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Unit tests (stub Valhalla, provisioner, polyline)
+        run: python3 -m unittest -v
+        working-directory: services/routing
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the routing image and check the tools the service relies on
+        run: |
+          docker build -f infrastructure/routing/Dockerfile -t kunde-routing:ci .
+          docker run --rm --entrypoint sh kunde-routing:ci -c '
+            python3 --version
+            valhalla_build_config --help | grep -q service-limits-auto-max-distance
+            valhalla_build_config --help | grep -q mjolnir-tile-extract
+            valhalla_service 2>&1 | head -3 || true'
