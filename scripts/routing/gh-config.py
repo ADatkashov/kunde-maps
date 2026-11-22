@@ -11,7 +11,7 @@ new, n = re.subn(r"(?ms)^  profiles:\n.*?(?=^  \S|\Z)", profiles + "\n", text, c
 if n != 1:
     sys.exit("profiles block not found in config-example.yml")
 # the example ignores footways/paths, which GraphHopper refuses to combine with the foot profile
-new = re.sub(r"(?m)^(\s*)(import\.osm\.ignored_highways:.*)$", r"\1# \2", new)
+new = re.sub(r"(?m)^(\s*)import\.osm\.ignored_highways:.*$", r'\1import.osm.ignored_highways: ""', new)
 # routing needs encoded values the foot/bike models use; keep whatever the example declares and add missing ones
 if "graph.encoded_values" in new:
     def add(m):
