@@ -1,9 +1,10 @@
 /* KUNDE Maps web: self-hosted Kazakhstan PMTiles via MapLibre + real Search API integration. */
 (async function () {
   const core = window.KundeCore;
+  const nav = window.KundeNav;
   const $ = id => document.getElementById(id);
   const status = $('status');
-  if (!core) { status.textContent = 'Карта не настроена: core.js не загружен'; return; }
+  if (!core || !nav) { status.textContent = 'Карта не настроена: core.js или nav.js не загружен'; return; }
   const root = document.documentElement;
 
   // ---- tiny helpers -------------------------------------------------------------------------
@@ -81,6 +82,7 @@
     // language switch would remove it. `placesData` always holds the latest results.
     let placesData = {type: 'FeatureCollection', features: []};
     let routeData = {type: 'FeatureCollection', features: []};
+    let navData = {type: 'FeatureCollection', features: []};   // travelled / remaining parts of the route during navigation
     let placesMode = null; // 'viewport' | 'nearby' | null; drives the tile-POI-dot visibility in localizedStyle
     function withPlaces(style, theme) {
       const dark = theme === 'dark';
@@ -93,6 +95,14 @@
           'line-color': dark ? '#94a3b8' : '#64748b', 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2, 16, 6], 'line-opacity': 0.85}},
         {id: 'route-line', type: 'line', source: 'route', filter: ['==', ['get', 'active'], true], layout: {'line-cap': 'round', 'line-join': 'round'}, paint: {
           'line-color': dark ? '#7aa2f7' : '#2563eb', 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.5, 16, 7]}});
+      style.sources.navroute = {type: 'geojson', data: navData};
+      style.layers.push(
+        {id: 'nav-casing', type: 'line', source: 'navroute', layout: {'line-cap': 'round', 'line-join': 'round'}, paint: {
+          'line-color': stroke, 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 7, 18, 20], 'line-opacity': 0.95}},
+        {id: 'nav-done', type: 'line', source: 'navroute', filter: ['==', ['get', 'part'], 'done'], layout: {'line-cap': 'round', 'line-join': 'round'}, paint: {
+          'line-color': dark ? '#64748b' : '#94a3b8', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 4, 18, 12], 'line-opacity': 0.9}},
+        {id: 'nav-left', type: 'line', source: 'navroute', filter: ['==', ['get', 'part'], 'left'], layout: {'line-cap': 'round', 'line-join': 'round'}, paint: {
+          'line-color': dark ? '#7aa2f7' : '#2563eb', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 4.5, 18, 13]}});
       style.sources.places = {type: 'geojson', data: placesData, cluster: true, clusterRadius: 46, clusterMaxZoom: 15};
       style.layers.push(
         {id: 'places-clusters', type: 'circle', source: 'places', filter: ['has', 'point_count'], paint: {
@@ -204,7 +214,8 @@
       buildChips(); renderFavorites();
       if (placesMode) renderPlacesList(placesInfo);
       if (items.length && !resultsEl.hidden) renderResults();
-      if (routeOpen) { renderRouteLabels(); buildRoute(); } else if (selected) showCard(selected);
+      if (navUi && navUi.active) navUi.setLang();
+      else if (routeOpen) { renderRouteLabels(); buildRoute(); } else if (selected) showCard(selected);
       setStatus(tr('langChanged'));
     });
 
@@ -336,9 +347,8 @@
         }
       }
       const route = $('route-place');
-      route.href = core.routeUrl(place.lat, place.lon);
-      route.title = routeClient ? tr('routeTitle') : tr('routeHint');
-      if (routeClient) { route.removeAttribute('target'); route.removeAttribute('rel'); }
+      route.hidden = !routeClient;   // without our own routing API there is no route button (no external map fallback)
+      route.title = tr('routeTitle');
       route.querySelector('span').textContent = tr('route');
       syncSaveButton();
       $('share-place').querySelector('span').textContent = tr('share');
@@ -907,6 +917,15 @@
     // Both ends are editable (type an address/place, use the device position once, or tap the map). The device position is used for the one
     // request only (sent to our routing API, never stored or logged). Without a configured routing API the button stays an external link.
     const routeClient = routingBase ? core.createRouteClient({baseUrl: routingBase}) : null;
+    function setNavData(collection) {
+      navData = collection;
+      const source = map.getSource && map.getSource('navroute');
+      if (source && source.setData) source.setData(navData);
+    }
+    // Phase 5 navigation: GPS session + HUD. Rerouting reuses the same routing client (one request at a time, no alternatives).
+    const navUi = routeClient && window.KundeNavUI ? window.KundeNavUI.create({map, maplibregl, nav, getLang: () => lang, setNavData,
+      fetchRoute: req => routeClient.route({from: req.from, to: req.to, mode: req.mode, lang: req.lang, alternatives: false, signal: req.signal, onSlow: req.onSlow}),
+      onExit: () => { if (routeOpen) closeRoute(true); }}) : null;
     let routeFrom = null, routeDest = null, routeMode = 'car', routeAbort = null, pickingStart = false, routes = [], routeActive = 0, pinFrom = null, pinTo = null;
     const routeStateEl = $('route-state'), routeStepsEl = $('route-steps'), stepsWrap = $('route-steps-wrap'), routeSummaryEl = $('route-summary'), routeOptionsEl = $('route-options');
     const fromInput = $('route-from'), toInput = $('route-to');
@@ -948,15 +967,20 @@
         input.placeholder = point ? '' : tr('routeSearchPlaceholder');
       }
       if (!routeFrom && document.activeElement !== fromInput) fromInput.placeholder = tr('routeNeedStart');
-      $('route-external').textContent = tr('routeExternal');
+      $('route-start').querySelector('span').textContent = nav.navT(lang, 'begin');
+      $('route-safety').textContent = nav.navT(lang, 'safety') + ' ' + nav.navT(lang, 'limits');
     }
-    function showRouteState(kind, text, extra) {
+    function showRouteState(kind, text, extra, actions) {
       routeStateEl.replaceChildren();
       routeStateEl.className = 'state' + (kind === 'error' ? ' error' : kind === 'warn' ? ' warn' : '');
       if (kind === 'loading') { const spinner = document.createElement('span'); spinner.className = 'spinner'; routeStateEl.append(spinner); }
       const body = document.createElement('div'); body.className = 'grow'; body.textContent = text;
       if (extra) { const small = document.createElement('small'); small.textContent = extra; body.append(small); }
       routeStateEl.append(body);
+      for (const action of actions || []) {
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'btn small'; button.textContent = action.label;
+        button.addEventListener('click', action.run); routeStateEl.append(button);
+      }
       routeStateEl.hidden = false;
     }
     function setPickingStart(on) {
@@ -968,7 +992,7 @@
     function resetRouteResult(keepPins) {
       routeSummaryEl.hidden = true; stepsWrap.hidden = true; routeStepsEl.replaceChildren();
       routeOptionsEl.hidden = true; routeOptionsEl.replaceChildren();
-      $('route-external').hidden = true;
+      $('route-start-row').hidden = true;
       routes = []; routeActive = 0;
       setRouteData(null, 0);
       if (!keepPins) updatePins();
@@ -1045,24 +1069,36 @@
       buildRoute();
     }
     const ROUTE_ERRORS = {outside_coverage: 'routeOutside', no_route: 'routeNoRoute', no_road_near_point: 'routeNoRoad', route_too_long: 'routeTooLong', points_too_close: 'routeTooClose'};
-    function buildRoute() {
+    // Route requests: bounded automatic retry with backoff for transient failures (a cold-starting Render service answers 502/503 or times out),
+    // never an endless loop; the user always keeps "Retry" and "Edit points" and stays inside KUNDE Maps.
+    const ROUTE_RETRY_DELAYS = [4000, 8000];
+    let routeRetryTimer = null;
+    function buildRoute(attempt = 0) {
+      clearTimeout(routeRetryTimer); routeRetryTimer = null;
       if (!routeOpen || !routeDest) return;
       if (routeAbort) routeAbort.abort();
       routeAbort = null;
       if (!routeFrom) { resetRouteResult(true); showRouteState('info', tr('routeNeedStart')); return; }
       routeAbort = new AbortController();
       const mine = routeAbort;
-      resetRouteResult(true);
+      if (attempt === 0) resetRouteResult(true);
       showRouteState('loading', tr('routeBuilding'));
+      const actions = () => [{label: tr('retry'), run: () => buildRoute(0)}, {label: tr('routeEditPoints'), run: () => { fromInput.focus(); }}];
       routeClient.route({from: routeFrom, to: routeDest, mode: routeMode, lang, alternatives: true, signal: mine.signal,
         onSlow: () => showRouteState('loading', tr('routeBuilding'), tr('waking'))})
         .then(route => { if (mine === routeAbort && routeOpen) showRoutes(route); })
         .catch(error => {
           if (error.code === 'aborted' || mine !== routeAbort || !routeOpen) return;
           const key = ROUTE_ERRORS[error.detail];
-          if (error.code === 'rate_limited') showRouteState('warn', tr('rateLimited').replace('{n}', error.retryAfter || 10));
-          else showRouteState('error', tr(key || 'routeFailed'));
-          if (!key && error.code !== 'rate_limited') { const link = $('route-external'); link.href = core.routeUrl(routeDest.lat, routeDest.lon); link.hidden = false; }
+          if (error.code === 'rate_limited') { showRouteState('warn', tr('rateLimited').replace('{n}', error.retryAfter || 10), null, actions()); return; }
+          if (key) { showRouteState('error', tr(key), null, [{label: tr('routeEditPoints'), run: () => { fromInput.focus(); }}]); return; }
+          if (error.transient && attempt < ROUTE_RETRY_DELAYS.length) {
+            const delay = ROUTE_RETRY_DELAYS[attempt];
+            showRouteState('loading', tr('routeRetrying').replace('{n}', Math.round(delay / 1000)), tr('waking'));
+            routeRetryTimer = setTimeout(() => { routeRetryTimer = null; if (mine === routeAbort && routeOpen) buildRoute(attempt + 1); }, delay);
+            return;
+          }
+          showRouteState('error', tr(error.transient || error.code === 'unavailable' ? 'routeServiceDown' : 'routeFailed'), null, actions());
         });
     }
     function showRoutes(main) {
@@ -1112,6 +1148,7 @@
         routeStepsEl.append(li);
       }
       stepsWrap.hidden = !route.steps.length;
+      $('route-start-row').hidden = !navUi;
       if (fit) stepsWrap.open = !isMobile();  // on a phone the step list starts collapsed so the map stays visible
       if (fit && route.bbox) {
         const all = routes.reduce((b, r) => r.bbox ? [Math.min(b[0], r.bbox[0]), Math.min(b[1], r.bbox[1]), Math.max(b[2], r.bbox[2]), Math.max(b[3], r.bbox[3])] : b, route.bbox);
@@ -1122,6 +1159,7 @@
       setStatus(core.formatDistance(route.distance, lang) + ' · ' + core.formatDuration(route.duration, lang));
     }
     function closeRoute(restoreCard = true) {
+      clearTimeout(routeRetryTimer); routeRetryTimer = null;
       if (routeAbort) routeAbort.abort();
       routeAbort = null; routeOpen = false;
       setPickingStart(false);
@@ -1130,6 +1168,12 @@
       refreshSheetVisibility();
     }
     $('route-close').addEventListener('click', () => closeRoute(true));
+    $('route-start').addEventListener('click', () => {
+      const route = routes[routeActive];
+      if (!navUi || !route || !routeDest) return;
+      setRouteData(null, 0);   // the plain route lines give way to the progress layers
+      navUi.start({route, destination: {lat: routeDest.lat, lon: routeDest.lon}, mode: route.mode});
+    });
     $('route-pick').addEventListener('click', () => setPickingStart(!pickingStart));
     $('route-locate').addEventListener('click', useMyLocation);
     $('route-swap').addEventListener('click', () => {

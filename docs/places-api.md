@@ -61,7 +61,7 @@ stays Apache-2.0. Do not mix this data with proprietary POI datasets without a s
   handed to `setStyle`, so theme/language switches keep them; tile POI dots are hidden while places are shown.
 - Place card: category chip, open/closed badge (Almaty time) and weekly table from `opening_hours`, address, phone (`tel:`), website
   (http(s) only, `rel="noopener noreferrer"`), brand, coordinates; actions Directions, Save, Share, Copy coordinates.
-- Directions: opens `openstreetmap.org/directions?to=lat,lon` in a new tab. This is a plain link (no data from us beyond the destination)
-  and an interim solution until KUNDE routing exists (Phase 4); no straight line is presented as a route.
+- Directions: opens the in-app route panel (Phase 4) with the place as destination, and from there GPS navigation (Phase 5, `docs/navigation.md`). The interim
+  OpenStreetMap link was removed; without a configured routing API the button is hidden. No straight line is presented as a route.
 - Saved places: `localStorage` (`kunde-favorites`, max 200, validated on load), device-local, no account. Share links carry the stable OSM id
   (`#poi=n123`) and fall back to the coordinate card when the place is not found.

@@ -29,8 +29,8 @@ The web app uses the device position only for the one request (sent to this API 
 ## Deploy configuration (Render, Docker, context = repo root, Dockerfile `infrastructure/routing/Dockerfile`)
 `MAPS_ROUTING_GRAPH_URL` (https R2 URL of `valhalla-tiles.tar`; SHA256 from the sidecar `.sha256` next to it, or pin with `MAPS_ROUTING_GRAPH_SHA256`),
 optional `MAPS_API_KEYS`, `MAPS_METRICS_TOKEN`, `MAPS_RATE_LIMIT_PER_MINUTE`, `MAPS_TRUSTED_PROXY_HOPS` (measure with the same method as the Search API).
-Web: `MAPS_ROUTING_URL=https://<routing host>` (adds `routingUrl` to config.json and the origin to the CSP; without it the "Route" button remains an
-OpenStreetMap link).
+Web: `MAPS_ROUTING_URL=https://<routing host>` (adds `routingUrl` to config.json and the origin to the CSP; without it the "Route" button is hidden - there is no
+external-map fallback).
 
 ## Graph build
 Actions -> "Build Kazakhstan routing graph" (manual): fetch the Geofabrik extract -> Valhalla tiles (~2 min, ~1.2 GB RAM) -> single `valhalla-tiles.tar` (~300 MB)
@@ -40,6 +40,11 @@ Actions -> "Build Kazakhstan routing graph" (manual): fetch the Geofabrik extrac
 ## Limitations
 No traffic, no live closures, no time-dependent restrictions, no timezone/admin data in the graph, Kazakh narration falls back to Russian,
 car/foot/bike only (no transit), two-point routes (no waypoints/alternatives yet), Valhalla image tag `latest` (pin by digest before production).
+
+## Navigation (Phase 5)
+The web app uses the same `GET /v1/route` for active navigation: the first route comes from the route panel; **rerouting** sends the current position as `from` and the
+original destination as `to` (no alternatives), at most one request in flight, 10 s cooldown, `Retry-After` honoured. The GPS track is never sent: matching is local.
+Maneuver `type` + `street` drive the HUD; instruction texts are localized by the client (`docs/navigation.md`).
 
 ## Web deep links
 `#lat=..&lng=..&name=..&poi=n123&route=car|foot|bike` opens the place and the route panel with that place as destination. The start is chosen by the viewer (device position or another point) and is **never** written to a URL; the web app updates the hash when the mode changes and removes `route=` when the panel is closed.

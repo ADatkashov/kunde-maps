@@ -5,6 +5,7 @@ const vm = require('node:vm');
 
 const script = fs.readFileSync('apps/web/map.js', 'utf8');
 const coreScript = fs.readFileSync('apps/web/core.js', 'utf8');
+const navScript = fs.readFileSync('apps/web/nav.js', 'utf8');
 const style = JSON.parse(fs.readFileSync('apps/web/style.json', 'utf8'));
 
 async function scenario(tileStatus, contentRange) {
@@ -49,7 +50,9 @@ async function scenario(tileStatus, contentRange) {
   context.maplibregl = context.window.maplibregl;
   vm.createContext(context);
   vm.runInContext(coreScript, context); // core.js (UMD) attaches KundeCore to the sandbox global
+  vm.runInContext(navScript, context);  // nav.js (UMD) attaches KundeNav
   context.window.KundeCore = context.KundeCore;
+  context.window.KundeNav = context.KundeNav;
   vm.runInContext(script, context);
   for (let i = 0; i < 20; i++) await new Promise(resolve => setImmediate(resolve));
   return {status: status.textContent, mapCreated, resolvedTileUrl, requests};

@@ -37,4 +37,5 @@ Acceptance criteria per task: runnable implementation, automated tests, license/
 - Next: Search API protection, index quality/transliteration, cartographic style v2 (`docs/development/next-task.md`).
 - Phase mapping used in autonomous development: P1 web design + search, P2 search quality + protection, P3 places/POI,
   P4 routing (Valhalla evaluation), P5 navigation, P6 Flutter apps, P7 public/B2B API and KUNDE integration.
+- Delivered 2026-11-22: Phase 5 navigation in the browser (GPS follow, turn-by-turn RU/KK/EN, local map matching, automatic rerouting, arrival; `docs/navigation.md`, ADR 0004). Status: **DEV navigation verified with simulated GPS**; **real-world navigation validated: open** (physical Android test, `docs/navigation-android-test.md`). Background navigation with a locked screen needs the native Phase 6 clients.
 - Delivered 2026-11-22: Phase 3 Places & POI (see `docs/places-api.md`). Phase 4 routing delivered and live on DEV (`docs/routing-api.md`, `docs/routing-evaluation.md`). Next: Phase 5 navigation (`docs/development/next-task.md`).

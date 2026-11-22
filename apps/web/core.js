@@ -31,13 +31,13 @@
       geoNearbyNote: 'Местоположение используется только для этого поиска и не сохраняется', clearFilters: 'Сбросить',
       openNow: 'Открыто', closedNow: 'Закрыто', open247: 'Круглосуточно', untilT: 'до {t}', opensAt: 'откроется в {t}', opensDay: 'откроется {d} в {t}',
       hours: 'Часы работы', hoursOsm: 'Часы работы (по данным OSM)', phone: 'Телефон', website: 'Сайт', address: 'Адрес', brand: 'Сеть',
-      route: 'Маршрут', routeHint: 'Откроется OpenStreetMap с маршрутом до этого места', save: 'Сохранить', saved: 'Сохранено',
+      route: 'Маршрут', save: 'Сохранить', saved: 'Сохранено',
       routeTitle: 'Маршрут', routeFrom: 'Откуда', routeTo: 'Куда', myLocation: 'Моё местоположение', pickOnMap: 'Выбрать на карте', pickHint: 'Нажмите на карту, чтобы задать начало маршрута',
       modeCar: 'Авто', modeFoot: 'Пешком', modeBike: 'Велосипед', routeBuilding: 'Строим маршрут…', routeClose: 'Закрыть маршрут', routeSteps: 'Пошагово',
       routeNote: 'Время в пути рассчитано по данным OpenStreetMap без учёта пробок и перекрытий.', routeNarrationRu: 'Подсказки показаны на русском',
       routeNoRoute: 'Маршрут не найден', routeNoRoad: 'Рядом с точкой нет дороги подходящего типа', routeOutside: 'Маршруты доступны только по Казахстану',
       routeTooLong: 'Слишком длинный маршрут для этого вида транспорта', routeFailed: 'Не удалось построить маршрут', routeTooClose: 'Начало и конец совпадают',
-      routeNeedStart: 'Укажите начало маршрута', routeExternal: 'Открыть в OpenStreetMap', routeSwap: 'Поменять местами', routeStart: 'Начало', routeEnd: 'Конец',
+      routeNeedStart: 'Укажите начало маршрута', routeEditPoints: 'Изменить точки', routeServiceDown: 'Сервис маршрутов временно недоступен', routeRetrying: 'Сервис маршрутов запускается. Повтор через {n} с…', routeSwap: 'Поменять местами', routeStart: 'Начало', routeEnd: 'Конец',
       routeAlt: 'Варианты маршрута', routeFastest: 'Быстрее всего', routeVariant: 'Вариант {n}', routeSearchPlaceholder: 'Адрес или место', routeUseMyLocation: 'Моё местоположение', routeSuggestions: 'Подсказки',
       hourShort: 'ч', minuteShort: 'мин',
       favorites: 'Сохранённые', favoritesEmpty: 'Пока ничего не сохранено. Нажмите «Сохранить» в карточке места.',
@@ -64,13 +64,13 @@
       geoNearbyNote: 'Орналасқан жер тек осы іздеу үшін қолданылады және сақталмайды', clearFilters: 'Тазалау',
       openNow: 'Ашық', closedNow: 'Жабық', open247: 'Тәулік бойы', untilT: '{t} дейін', opensAt: '{t} ашылады', opensDay: '{d} {t} ашылады',
       hours: 'Жұмыс уақыты', hoursOsm: 'Жұмыс уақыты (OSM деректері)', phone: 'Телефон', website: 'Сайт', address: 'Мекенжай', brand: 'Желі',
-      route: 'Маршрут', routeHint: 'Осы жерге маршрут бар OpenStreetMap ашылады', save: 'Сақтау', saved: 'Сақталды',
+      route: 'Маршрут', save: 'Сақтау', saved: 'Сақталды',
       routeTitle: 'Маршрут', routeFrom: 'Қайдан', routeTo: 'Қайда', myLocation: 'Менің орным', pickOnMap: 'Картадан таңдау', pickHint: 'Маршрут басталатын жерді картадан басыңыз',
       modeCar: 'Көлік', modeFoot: 'Жаяу', modeBike: 'Велосипед', routeBuilding: 'Маршрут құрылуда…', routeClose: 'Маршрутты жабу', routeSteps: 'Қадамдар',
       routeNote: 'Жол уақыты OpenStreetMap деректері бойынша есептелген, кептелістер мен жабылған жолдар ескерілмейді.', routeNarrationRu: 'Нұсқаулар орыс тілінде көрсетіледі',
       routeNoRoute: 'Маршрут табылмады', routeNoRoad: 'Нүктенің маңында қолайлы жол жоқ', routeOutside: 'Маршруттар тек Қазақстан бойынша қолжетімді',
       routeTooLong: 'Бұл көлік түріне маршрут тым ұзақ', routeFailed: 'Маршрутты құру мүмкін болмады', routeTooClose: 'Бастапқы және соңғы нүкте сәйкес келеді',
-      routeNeedStart: 'Маршрут басын көрсетіңіз', routeExternal: 'OpenStreetMap-та ашу', routeSwap: 'Орындарын ауыстыру', routeStart: 'Басы', routeEnd: 'Соңы',
+      routeNeedStart: 'Маршрут басын көрсетіңіз', routeEditPoints: 'Нүктелерді өзгерту', routeServiceDown: 'Маршрут қызметі уақытша қолжетімсіз', routeRetrying: 'Маршрут қызметі қосылып жатыр. {n} с кейін қайталанады…', routeSwap: 'Орындарын ауыстыру', routeStart: 'Басы', routeEnd: 'Соңы',
       routeAlt: 'Маршрут нұсқалары', routeFastest: 'Ең жылдам', routeVariant: '{n}-нұсқа', routeSearchPlaceholder: 'Мекенжай немесе орын', routeUseMyLocation: 'Менің орным', routeSuggestions: 'Ұсыныстар',
       hourShort: 'сағ', minuteShort: 'мин',
       favorites: 'Сақталғандар', favoritesEmpty: 'Әзірге ештеңе сақталмаған. Орын карточкасында «Сақтау» түймесін басыңыз.',
@@ -97,13 +97,13 @@
       geoNearbyNote: 'Your location is used only for this search and is not stored', clearFilters: 'Clear',
       openNow: 'Open', closedNow: 'Closed', open247: 'Open 24/7', untilT: 'until {t}', opensAt: 'opens at {t}', opensDay: 'opens {d} at {t}',
       hours: 'Opening hours', hoursOsm: 'Opening hours (from OSM)', phone: 'Phone', website: 'Website', address: 'Address', brand: 'Brand',
-      route: 'Directions', routeHint: 'Opens OpenStreetMap with directions to this place', save: 'Save', saved: 'Saved',
+      route: 'Directions', save: 'Save', saved: 'Saved',
       routeTitle: 'Route', routeFrom: 'From', routeTo: 'To', myLocation: 'My location', pickOnMap: 'Choose on map', pickHint: 'Tap the map to set the start of the route',
       modeCar: 'Drive', modeFoot: 'Walk', modeBike: 'Cycle', routeBuilding: 'Building the route…', routeClose: 'Close route', routeSteps: 'Step by step',
       routeNote: 'Travel time comes from OpenStreetMap speed data and ignores traffic and closures.', routeNarrationRu: 'Directions are shown in Russian',
       routeNoRoute: 'No route found', routeNoRoad: 'No suitable road near the point', routeOutside: 'Routes are available in Kazakhstan only',
       routeTooLong: 'This route is too long for the selected mode', routeFailed: 'Could not build the route', routeTooClose: 'Start and end are the same',
-      routeNeedStart: 'Set the start of the route', routeExternal: 'Open in OpenStreetMap', routeSwap: 'Swap', routeStart: 'Start', routeEnd: 'End',
+      routeNeedStart: 'Set the start of the route', routeEditPoints: 'Edit points', routeServiceDown: 'The routing service is temporarily unavailable', routeRetrying: 'The routing service is starting. Retrying in {n} s…', routeSwap: 'Swap', routeStart: 'Start', routeEnd: 'End',
       routeAlt: 'Route options', routeFastest: 'Fastest', routeVariant: 'Option {n}', routeSearchPlaceholder: 'Address or place', routeUseMyLocation: 'My location', routeSuggestions: 'Suggestions',
       hourShort: 'h', minuteShort: 'min',
       favorites: 'Saved places', favoritesEmpty: 'Nothing saved yet. Tap “Save” on a place card.',
@@ -413,11 +413,6 @@
     return meters < 1000 ? Math.round(meters / 10) * 10 + ' ' + t(lang, 'meters') : (meters / 1000).toFixed(meters < 10000 ? 1 : 0) + ' ' + t(lang, 'kilometers');
   }
 
-  /** Link to external directions (OpenStreetMap). Used until KUNDE routing exists; no coordinates are sent by us. */
-  function routeUrl(lat, lon) {
-    return 'https://www.openstreetmap.org/directions?from=&to=' + encodeURIComponent(lat.toFixed(5) + ',' + lon.toFixed(5));
-  }
-
   /** "1 h 05 min" / "12 min" / "<1 min" in the UI language. */
   function formatDuration(seconds, lang) {
     if (!Number.isFinite(seconds) || seconds < 0) return '';
@@ -678,7 +673,7 @@
     MIN_CHARS, MAX_CHARS, LANGS, STRINGS, t, normalizeQuery, isSearchable, kindLabel, zoomForKind, displayName,
     formatCoords, parseConfigUrl, validPlace, SearchError, createSearchClient, parsePlaceHash, buildPlaceHash,
     CATEGORIES, CATEGORY_COLORS, CATEGORY_LABELS, PLACE_ID, categoryLabel, placeKindLabel, safeWebsite, telHref, validPoi, poiTitle,
-    formatDistance, formatDuration, routeUrl, validRoute, createRouteClient, ROUTE_MODES, createPlacesClient, parseOpeningHours, openStatus, hoursTable, openLabel, WEEKDAY_LABELS,
+    formatDistance, formatDuration, validRoute, createRouteClient, ROUTE_MODES, createPlacesClient, parseOpeningHours, openStatus, hoursTable, openLabel, WEEKDAY_LABELS,
     favoriteKey, isFavorite, toggleFavorite, parseFavorites, validFavorite, favoriteTitle,
   };
 });
