@@ -27,8 +27,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 class FakeGps extends GeolocatorPlatform {
   bool serviceEnabled = true;
   LocationPermission permission = LocationPermission.whileInUse;
-  double latitude = 43.202109; // MEGA Alma-Ata (OSM place 201232)
-  double longitude = 76.891926;
+  double latitude = 43.238946; // Republic Square, Almaty (OSM place 672026)
+  double longitude = 76.945167;
 
   @override
   Future<bool> isLocationServiceEnabled() async => serviceEnabled;
@@ -102,7 +102,7 @@ void main() {
       waitUntil(
         tester,
         () => finder.evaluate().isNotEmpty,
-        'waiting for $finder',
+        'waiting for a widget',
         seconds: seconds,
       );
 
@@ -172,17 +172,16 @@ void main() {
   }
 
   Future<void> searchAndSelect(WidgetTester tester, String query) async {
-    // Resolve the place with the same real Search API, then select that very
-    // result in the UI: deterministic and still end to end.
+    // Resolve the place with the same real Search API and the map centre the
+    // app itself uses for its first search, so the UI shows the same result.
     final client = http.Client();
     addTearDown(client.close);
-    final found = await PlatformApi(client).search(
-      query,
-      'en',
-      const Point(43.238, 76.945),
-      Completer<void>().future,
-    );
-    final name = found.first.name('en', '');
+    final found = await PlatformApi(client)
+        .search(query, 'en', const Point(48.1, 67.8), Completer<void>().future);
+    final place = found.first;
+    expect(place.point.lat, inInclusiveRange(43.0, 43.5), reason: 'in Almaty');
+    expect(place.point.lon, inInclusiveRange(76.6, 77.2), reason: 'in Almaty');
+    final name = place.name('en', '');
     expect(name, isNotEmpty);
     await tester.enterText(find.byType(TextField), name);
     await tester.pump(const Duration(milliseconds: 500));
@@ -203,7 +202,7 @@ void main() {
     tester,
   ) async {
     await launch(tester);
-    await searchAndSelect(tester, 'Dostyk Plaza');
+    await searchAndSelect(tester, 'Mega Alma-Ata');
     await tap(tester, find.byIcon(Icons.directions_outlined).first);
     await tap(tester, find.text(words('origin')));
     await tap(tester, find.text(words('locate')));

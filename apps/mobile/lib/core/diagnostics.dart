@@ -15,7 +15,11 @@ class Diagnostics extends ChangeNotifier {
 
   Map<String, String> get values => Map.unmodifiable(_values);
 
-  String? operator [](String key) => _values[key];
+  /// `null` for a key that was never set or was set to null (stored as '-').
+  String? operator [](String key) {
+    final value = _values[key];
+    return value == '-' ? null : value;
+  }
 
   void set(String key, Object? value) {
     final text = value?.toString() ?? '-';
