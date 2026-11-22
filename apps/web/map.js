@@ -245,6 +245,7 @@
       const kind = $('selection-kind');
       let kindText = poi ? core.placeKindLabel(poi, lang) : (place.kind ? core.kindLabel(place.kind, lang) : '');
       if (poi && (kindText === core.poiTitle(poi, lang) || kindText === core.categoryLabel(poi.category, lang))) kindText = ''; // already shown as title or chip
+      if (!poi && place.raw && place.raw.locality) kindText = kindText ? kindText + ' · ' + place.raw.locality : place.raw.locality;
       kind.textContent = kindText;
       kind.hidden = !kindText;
       $('selection-coords').textContent = core.formatCoords(place.lat, place.lon);
@@ -468,7 +469,7 @@
         const text = document.createElement('span'); text.className = 'result-text';
         const name = document.createElement('span'); name.className = 'result-name'; name.textContent = core.displayName(raw, lang);
         const sub = document.createElement('span'); sub.className = 'result-sub';
-        sub.textContent = core.kindLabel(raw.kind, lang) + ' · ' + raw.lat.toFixed(4) + ', ' + raw.lon.toFixed(4);
+        sub.textContent = core.kindLabel(raw.kind, lang) + ' · ' + (raw.locality || (raw.lat.toFixed(4) + ', ' + raw.lon.toFixed(4)));
         text.append(name, sub);
         li.append(pin, text);
         li.addEventListener('click', () => selectPlace(raw));

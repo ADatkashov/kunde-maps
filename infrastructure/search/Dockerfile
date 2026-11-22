@@ -3,6 +3,7 @@ WORKDIR /app
 COPY services/search/server.py /app/server.py
 COPY services/search/protection.py /app/protection.py
 COPY services/search/apikeys.py /app/apikeys.py
+COPY services/search/addresses.py /app/addresses.py
 COPY services/search/textnorm.py /app/textnorm.py
 COPY services/search/categories.py /app/categories.py
 COPY services/search/places.py /app/places.py

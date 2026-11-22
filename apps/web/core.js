@@ -184,6 +184,8 @@
       // present when the index has place attributes: the stable OSM id and category open the full place card
       placeId: typeof raw.place_id === 'string' && /^[nwr]\d{1,12}$/.test(raw.place_id) ? raw.place_id : null,
       category: CATEGORIES_LIST.includes(raw.category) ? raw.category : null,
+      // address rows: nearest settlement name derived by the API (context only, may be absent)
+      locality: typeof raw.locality === 'string' ? raw.locality.slice(0, 80) : '',
     };
   }
 

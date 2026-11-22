@@ -216,6 +216,19 @@ const tests = {
     assert.deepEqual(errors, []);
     await context.close();
   },
+  async 'address results show their locality instead of bare coordinates, and the card repeats it'(browser) {
+    const {page, context} = await openPage(browser, {handler: async () => ({results: [
+      place(31, 'улица Абая 150', 'address', 43.207, 76.77, {locality: 'Алматы'}), place(32, 'Абая 150', 'address', 43.918, 67.265)]})});
+    await page.locator('#search-query').fill('Абая 150');
+    await results(page).nth(1).waitFor();
+    assert.match(await results(page).nth(0).innerText(), /Адрес\s+·\s+Алматы/);
+    assert.doesNotMatch(await results(page).nth(0).innerText(), /43\.2070/);
+    assert.match(await results(page).nth(1).innerText(), /43\.9180, 67\.2650/);  // no locality: coordinates as before, nothing invented
+    await results(page).nth(0).click();
+    await page.locator('#selection').waitFor();
+    assert.match(await page.locator('#selection-kind').innerText(), /Алматы/);
+    await context.close();
+  },
   async 'language switch re-localizes names, kinds and map labels'(browser) {
     const {page, context} = await openPage(browser, {handler: async () => ({results: [place(1, 'Almaty', 'city', 43.2, 76.9, {name_ru: 'Алматы', name_kk: 'Алматы қ.'})]})});
     await page.locator('#search-query').fill('Алматы');

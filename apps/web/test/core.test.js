@@ -25,6 +25,14 @@ test('builds an encoded request and maps valid places only', async () => {
   assert.equal(urls[0], 'https://s.test/v1/search?q=%D2%9A%D0%B0%D0%B7%D0%B0%D2%9B%D1%81%D1%82%D0%B0%D0%BD%20%26%20co&limit=5');
 });
 
+test('keeps the API locality of address rows as plain text and ignores non-strings', async () => {
+  const c = client(async () => ok([place({locality: 'Алматы'}), place({locality: 42}), place({locality: 'x'.repeat(200)})]));
+  const [a, b, long] = await c.search('Абая 150');
+  assert.equal(a.locality, 'Алматы');
+  assert.equal(b.locality, '');
+  assert.equal(long.locality.length, 80);
+});
+
 test('sends language and rounded map centre as ranking hints; cache is keyed by them', async () => {
   const urls = [];
   const c = client(async url => { urls.push(url); return ok([place()]); });

@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlparse
 
 import places
 import textnorm
+import addresses
 import apikeys
 from protection import BusyError, ConcurrencyGate, Metrics, TokenBuckets, client_ip, env_int
 
@@ -41,6 +42,7 @@ KIND_RANK = """CASE p.kind WHEN 'city' THEN 0 WHEN 'town' THEN 1 WHEN 'state' TH
 
 
 CANDIDATES = 150
+ADDRESS_CANDIDATES = 1500
 LANGS = ("ru", "kk", "en")
 
 
@@ -91,19 +93,24 @@ def _edit_distance_at_most_one(a, b):
     return edits + (len(b) - j) + (len(a) - i) <= 1
 
 
-def _search_v2(connection, query, limit, lang, center, version=2):
+def _search_v2(connection, db_path, query, limit, lang, center, version=2):
     tokens = textnorm.skeleton_tokens(query)[:8]
     if not tokens:
         return []
     full = " ".join(tokens)
-    rows = list(_fts_rows(connection, tokens, CANDIDATES, version))
+    # Street-type words (улица, проспект, көшесі...) are optional in what people type and in OSM names: retrieve and match on the core.
+    search_tokens = addresses.core_tokens(tokens)
+    core_full = " ".join(search_tokens)
+    # House-number queries match many equal-importance rows across the country: look at more of them so proximity can pick.
+    pool = ADDRESS_CANDIDATES if any(any(ch.isdigit() for ch in t) for t in tokens) else CANDIDATES
+    rows = list(_fts_rows(connection, search_tokens, pool, version))
     names_of = lambda row: [row["name"], row["name_ru"], row["name_kk"], row["name_en"]] + (row["alt"] or "").split(";")
     skeletons_of = {row["id"]: [sk for sk in (textnorm.skeleton(n) for n in names_of(row) if n) if sk] for row in rows}
     # Typo tolerance without a second index: when nothing matches exactly, also try the query without its last
     # letter (Алмата -> almat* reaches Алматы). Candidates within edit distance 1 of the query then rank next to exact.
-    if len(tokens[-1]) >= 4 and not any(full in sks for sks in skeletons_of.values()):
+    if len(search_tokens[-1]) >= 4 and not any(full in sks for sks in skeletons_of.values()):
         seen = {row["id"] for row in rows}
-        for row in _fts_rows(connection, tokens[:-1] + [tokens[-1][:-1]], CANDIDATES, version):
+        for row in _fts_rows(connection, search_tokens[:-1] + [search_tokens[-1][:-1]], CANDIDATES, version):
             if row["id"] not in seen:
                 rows.append(row)
                 skeletons_of[row["id"]] = [sk for sk in (textnorm.skeleton(n) for n in names_of(row) if n) if sk]
@@ -111,9 +118,11 @@ def _search_v2(connection, query, limit, lang, center, version=2):
     for row in rows:
         skeletons = skeletons_of[row["id"]]
         exact = full in skeletons
+        # same name without the street-type word: 'Абая 150' vs 'проспект Абая 150' (a hair below a spelling-exact match)
+        exact_core = not exact and any(addresses.core(sk) == core_full for sk in skeletons)
         near = not exact and len(full) >= 5 and any(_edit_distance_at_most_one(full, sk) for sk in skeletons)
         prefix = any(sk.startswith(full) for sk in skeletons)
-        score = (10000 if exact else 8000 if near else 4000 if prefix else 0) + row["importance"]
+        score = (10000 if exact else 9900 if exact_core else 8000 if near else 4000 if prefix else 0) + row["importance"]
         own = {"ru": row["name_ru"], "kk": row["name_kk"], "en": row["name_en"]}.get(lang)
         if exact and own and textnorm.skeleton(own) == full:
             score += 80  # the user's own language spelling matches
@@ -128,6 +137,10 @@ def _search_v2(connection, query, limit, lang, center, version=2):
         if version >= 3:  # stable id + category let the web app open the full place card (/v1/places/{place_id})
             item["place_id"] = row["osm_id"] or None
             item["category"] = row["category"] or None
+            if row["kind"] == "address":
+                place = addresses.locality(connection, db_path, row["lat"], row["lon"], lang)
+                if place:
+                    item["locality"] = place
         results.append(item)
     return results
 
@@ -157,7 +170,7 @@ def search(db_path, query, limit=DEFAULT_LIMIT, lang="ru", center=None):
     try:
         version = _schema_version(connection)
         if version >= 2:
-            return _search_v2(connection, query, limit, lang if lang in LANGS else "ru", center, version)
+            return _search_v2(connection, db_path, query, limit, lang if lang in LANGS else "ru", center, version)
         return _search_v1(connection, query, limit)
     finally:
         connection.close()

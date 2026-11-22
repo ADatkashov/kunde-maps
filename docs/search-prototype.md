@@ -186,3 +186,20 @@ The public web client is anonymous (per-IP token bucket, `MAPS_RATE_LIMIT_PER_MI
 - Metrics: `kunde_search_key_requests_total{key="name"}` and `kunde_search_invalid_keys_total`; secrets, IPs and queries are never logged.
 - CORS does not allow the `X-API-Key` header: keys must not be embedded in browser code. Browser clients would need short-lived tokens
   (follow-up: token issuance requires a server-side component that can authenticate users, planned with the KUNDE integration).
+
+## House-number addresses (v3 index)
+
+About 1.37 M OSM address points (`addr:street` + `addr:housenumber`) are indexed. Findings on the real index and what changed:
+
+- **Street-type words are optional.** `улица / проспект / шоссе / көшесі / даңғылы / street / avenue ...` are stripped from the query for retrieval and
+  matching (`services/search/addresses.py`), so `Абая 150` finds `улица Абая 150` and `проспект Абая 150` finds `Абая 150` (a spelling-exact
+  match still ranks a hair above a match that needed the stripping).
+- **Proximity picks between equal addresses.** House-number queries look at up to 1500 candidates (instead of 150) so that the map-centre hint
+  (`lat`/`lon`) can choose the nearby one; measured on the real index: 2-35 ms. Before: `Абая 150` from the Almaty centre returned a Turkestan-region
+  address first because the Almaty row (`улица Абая 150`) did not count as a match.
+- **`locality` for address rows.** Most OSM addresses carry no `addr:city`. The API adds the *nearest city/town/village name stored in the index*
+  (limits 30 / 20 / 8 km, a city's catchment counts double) as context, in the requested language. It is a nearest-settlement hint derived from
+  OSM data, not an administrative boundary, and is omitted when nothing is within the limits. First request after a start builds the settlement
+  grid (~0.15 s), later requests ~0.
+- Not solved: queries that include a city ("Абая 150 Алматы") because address rows have no city token; real admin boundaries would need the OSM
+  boundary relations in the index build.
