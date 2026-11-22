@@ -11,7 +11,7 @@ dependencies:
     git:
       url: https://github.com/ADatkashov/kunde-maps.git
       path: packages/kunde_maps_sdk
-      ref: sdk-v0.2.0
+      ref: <commit of the release>   # tag sdk-v0.2.0 when tags are available; a full commit SHA is equally immutable
 ```
 
 ```dart

@@ -57,8 +57,9 @@ map would otherwise copy the Maps app code.
    the courier or driver; coordinates are never logged; the subscription is a poll bound to the trip lifecycle (stops when the trip is no longer
    active), so there is no long-lived socket to leak. The SDK gives hosts `coarsen()` and keeps its own GPS track in memory only.
 9. **No new microservices.** Search, Routing and Web already exist. The SDK is a library; `kunde` gains one adapter class in the monolith.
-10. **Versioning and compatibility.** SemVer. Consumers pin a git tag (`sdk-vX.Y.Z`) of this repository
-    (`git: {url, path: packages/kunde_maps_sdk, ref}`). Public API additions are minor; removals/renames are major with one deprecated release
+10. **Versioning and compatibility.** SemVer. Consumers pin an immutable git ref of this repository
+    (`git: {url, path: packages/kunde_maps_sdk, ref}`): the release tag `sdk-vX.Y.Z` or, where tags cannot be created, the full commit SHA of the release
+    commit (the Super App uses the SHA; the version is recorded next to it in its `pubspec.yaml`). Public API additions are minor; removals/renames are major with one deprecated release
     first. The Maps API is versioned (`/v1`); the SDK ignores unknown fields. CI runs the SDK on Flutter **3.47.9 (Super App) and 3.50.1 (Maps
     app)** so neither side can break the other. The Maps Platform (tiles, search index, routing graph) updates independently of apps.
 11. **Map weight follows the need.** Address selection uses `LocationPicker` (one map, no navigation stack). `NavigationController` is only
