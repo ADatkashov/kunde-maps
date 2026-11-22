@@ -93,7 +93,7 @@ jobs:
           text = open('/tmp/security-headers.inc').read()
           csp = next(l for l in text.splitlines() if 'Content-Security-Policy' in l)
           assert "script-src 'self';" in csp and 'unsafe-inline' not in csp and 'unsafe-eval' not in csp, csp
-          assert "connect-src 'self' https://fonts.openmaptiles.org https://tiles.example.com https://search.example.com;" in csp, csp
+          assert "connect-src 'self' https://tiles.example.com https://search.example.com;" in csp, csp
           assert "default-src 'none'" in csp and "frame-ancestors 'none'" in csp and "object-src 'none'" in csp, csp
           for header in ('X-Content-Type-Options', 'Referrer-Policy', 'Permissions-Policy', 'X-Frame-Options', 'Strict-Transport-Security'):
               assert header in text, header

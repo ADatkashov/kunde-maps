@@ -11,7 +11,7 @@ Decisions
 - Move the theme bootstrap to `theme-init.js`; no inline scripts or `style=` attributes in `index.html` (enforced in CI).
 - nginx serves a generated policy (`40-configure-tiles.sh` -> `/etc/nginx/security-headers.inc`, included by every location):
   `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'` plus exactly
-  the configured tile origin, Search API origin and `https://fonts.openmaptiles.org` (glyphs); `worker-src blob:` (MapLibre workers);
+  the configured tile origin, Search API origin (glyphs were later self-hosted, so no third-party host remains); `worker-src blob:` (MapLibre workers);
   `base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'`. Also `X-Content-Type-Options`, `Referrer-Policy:
   strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, `Permissions-Policy: geolocation=(self), camera=(), ...`, HSTS.
 - No `unsafe-inline` / `unsafe-eval`: verified with the real map (real tiles, live API, clusters, theme/language switching, nearby, save)

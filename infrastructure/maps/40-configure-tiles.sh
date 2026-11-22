@@ -26,7 +26,7 @@ printf '{"styleUrl":"/style.json"%s%s}\n' "$tile_json" "$search_json" > /srv/kun
 # Content-Security-Policy and friends, generated from the (already validated) public origins so the policy lists exactly the hosts
 # the page talks to: our origin, the tile host, the Search API and the public glyph host. Nothing inline, nothing eval-able.
 csp_file=${CSP_FILE:-/etc/nginx/security-headers.inc}
-connect="'self' https://fonts.openmaptiles.org"
+connect="'self'"
 if [ -n "${MAPS_TILE_URL:-}" ]; then
   connect="$connect $(printf '%s' "$MAPS_TILE_URL" | sed -E 's#^(https://[^/]+)/.*#\1#')"
 fi
