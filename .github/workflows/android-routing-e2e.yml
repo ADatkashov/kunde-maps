@@ -126,7 +126,7 @@ jobs:
             adb logcat -d > /tmp/release-logcat.txt
             adb exec-out screencap -p > /tmp/release-start.png
             adb shell pidof kz.kunde.maps
-            ! grep -E "FATAL EXCEPTION|ClassNotFoundException|NoSuchMethodError" /tmp/release-logcat.txt
+            ! grep -E "FATAL EXCEPTION|Process: kz.kunde.maps|(ClassNotFoundException|NoSuchMethodError|UnsatisfiedLinkError).*(kunde|maplibre|flutter|geolocator)" /tmp/release-logcat.txt
       - uses: actions/upload-artifact@v6
         if: always()
         with:
