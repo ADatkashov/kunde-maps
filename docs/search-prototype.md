@@ -174,3 +174,15 @@ Index built by Actions run 44992519201 from `kazakhstan-261120.osm.pbf` (1,451,7
 1.000 / MRR 1.000 on 36 cases. Server-side metrics during the run: 105 searches, 0 5xx, 0 busy, mean handler time ~50 ms. One transient
 `503` was observed by a browser in the same window with **zero** 5xx counted by the app, i.e. it originated at the hosting proxy; the
 web client retries once, so users did not notice. Free-tier cold start (up to ~1 min) and rare proxy 503s remain known limits.
+
+## API keys and quotas (server-to-server clients)
+
+The public web client is anonymous (per-IP token bucket, `MAPS_RATE_LIMIT_PER_MINUTE`/`BURST`). Partners and our own backends get API keys:
+
+- `python3 services/search/apikeys.py generate NAME PER_MINUTE` prints the secret **once** and the configuration entry; only the SHA-256 goes into
+  `MAPS_API_KEYS` (`name:sha256hex:per_minute,...`, Render env var; invalid entries stop the server at startup).
+- Clients send `X-API-Key: <secret>` (never in URLs). A valid key has its own bucket (quota shared by all of its IPs, burst = max(30, rate/4));
+  an unknown key gets `401 invalid_api_key` and is never downgraded to anonymous; `429` + `Retry-After` when the quota is used up.
+- Metrics: `kunde_search_key_requests_total{key="name"}` and `kunde_search_invalid_keys_total`; secrets, IPs and queries are never logged.
+- CORS does not allow the `X-API-Key` header: keys must not be embedded in browser code. Browser clients would need short-lived tokens
+  (follow-up: token issuance requires a server-side component that can authenticate users, planned with the KUNDE integration).

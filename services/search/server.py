@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlparse
 
 import places
 import textnorm
+import apikeys
 from protection import BusyError, ConcurrencyGate, Metrics, TokenBuckets, client_ip, env_int
 
 DB_PATH = Path(os.environ.get("MAPS_SEARCH_DB", "/data/search.sqlite3"))
@@ -26,6 +27,11 @@ MAX_CONCURRENT = env_int(os.environ, "MAPS_MAX_CONCURRENT_SEARCHES", 16, 1, 256)
 TRUSTED_HOPS = env_int(os.environ, "MAPS_TRUSTED_PROXY_HOPS", 1, 0, 5)
 METRICS_TOKEN = os.environ.get("MAPS_METRICS_TOKEN", "")
 LIMITER = TokenBuckets(RATE_PER_MINUTE, RATE_BURST)
+try:
+    KEYRING = apikeys.KeyRing(apikeys.parse(os.environ.get("MAPS_API_KEYS", "")))
+except ValueError as exc:  # fail closed at startup: a typo must not silently disable keys or quotas
+    raise SystemExit(f"MAPS_API_KEYS invalid: {exc}")
+KEY_LIMITERS = {name: TokenBuckets(rate, max(30, rate // 4)) for name, rate in KEYRING.limits().items()}
 GATE = ConcurrencyGate(MAX_CONCURRENT)
 METRICS = Metrics()
 # Settlements outrank POIs/addresses with the same name; bm25 breaks ties.
@@ -203,7 +209,17 @@ class Handler(BaseHTTPRequestHandler):
             return "other"
         route = "places" if is_places else "search"
         ip = client_ip(self.headers.get("X-Forwarded-For"), self.client_address[0], TRUSTED_HOPS)
-        allowed, retry_after = LIMITER.check(ip)
+        presented = self.headers.get("X-API-Key")
+        if presented is not None:
+            key = KEYRING.lookup(presented)
+            if key is None:
+                METRICS.incr("invalid_keys")
+                self.reply(401, {"error": "invalid_api_key"})
+                return route
+            METRICS.key_used(key[0])
+            allowed, retry_after = KEY_LIMITERS[key[0]].check(key[0])  # quota is per key, shared by all of its client IPs
+        else:
+            allowed, retry_after = LIMITER.check(ip)
         if not allowed:
             METRICS.incr("rate_limited")
             self.reply(429, {"error": "rate_limited", "retry_after": retry_after}, {"Retry-After": str(retry_after)})
