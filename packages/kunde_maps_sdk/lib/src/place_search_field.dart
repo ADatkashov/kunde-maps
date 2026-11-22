@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'errors.dart';
 import 'geo.dart';
+import 'material_scope.dart';
 import 'models.dart';
 import 'services.dart';
 import 'strings.dart';
@@ -103,51 +104,55 @@ class _PlaceSearchFieldState extends State<PlaceSearchField> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TextField(
-          controller: _text,
-          autofocus: widget.autofocus,
-          textInputAction: TextInputAction.search,
-          decoration: InputDecoration(
-            prefixIcon: const Icon(Icons.search),
-            hintText: widget.hint ?? _s('search'),
-            suffixIcon: _loading
-                ? const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: SizedBox.square(
-                      dimension: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                : null,
-          ),
-          onChanged: _changed,
-        ),
-        if (_error != null)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text(
-              _s.error(_error!),
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
+  Widget build(BuildContext outer) {
+    return MapsMaterialScope(
+      child: Builder(
+        builder: (context) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _text,
+              autofocus: widget.autofocus,
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.search),
+                hintText: widget.hint ?? _s('search'),
+                suffixIcon: _loading
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : null,
+              ),
+              onChanged: _changed,
             ),
-          )
-        else if (_searched && !_loading && _results.isEmpty)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text(_s('noResults')),
-          ),
-        for (final place in _results)
-          ListTile(
-            leading: const Icon(Icons.place_outlined),
-            title: Text(place.name(widget.language, _s('search'))),
-            subtitle: _subtitle(place),
-            onTap: () => widget.onSelected(place),
-          ),
-      ],
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  _s.error(_error!),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              )
+            else if (_searched && !_loading && _results.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(_s('noResults')),
+              ),
+            for (final place in _results)
+              ListTile(
+                leading: const Icon(Icons.place_outlined),
+                title: Text(place.name(widget.language, _s('search'))),
+                subtitle: _subtitle(place),
+                onTap: () => widget.onSelected(place),
+              ),
+          ],
+        ),
+      ),
     );
   }
 

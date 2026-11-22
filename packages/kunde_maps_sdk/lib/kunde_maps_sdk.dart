@@ -27,6 +27,7 @@ export 'src/map_style.dart'
     show nativeStyle, routeFeatures, routeSourceId, primaryRouteLayerId;
 export 'src/map_view.dart';
 export 'src/markers.dart';
+export 'src/material_scope.dart' show MapsAppearance, MapsAppearanceScope;
 export 'src/models.dart';
 export 'src/navigation.dart';
 export 'src/navigation_view.dart';

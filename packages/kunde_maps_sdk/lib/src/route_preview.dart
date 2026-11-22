@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import 'material_scope.dart';
 import 'services.dart';
 import 'strings.dart';
 
@@ -22,7 +23,11 @@ class RoutePreview extends StatelessWidget {
   final DateTime? now;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext outer) => MapsMaterialScope(
+    child: Builder(builder: (context) => _content(context)),
+  );
+
+  Widget _content(BuildContext context) {
     final s = MapsStrings(language);
     final eta = data.eta(now);
     final km = data.distanceMeters >= 1000
