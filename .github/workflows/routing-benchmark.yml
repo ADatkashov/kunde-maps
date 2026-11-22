@@ -1,0 +1,73 @@
+name: routing-benchmark
+# Manual experiment (no deploy, no paid resources): build a routing graph from the Geofabrik extract on a free GitHub runner and
+# measure build time, peak RAM, disk and route latency for OSRM, Valhalla and GraphHopper. Results land in the job summary.
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "almaty (bbox extract) or kazakhstan (full country)"
+        default: almaty
+        type: choice
+        options: [almaty, kazakhstan]
+      engines:
+        description: "space separated: osrm valhalla graphhopper"
+        default: "osrm valhalla graphhopper"
+permissions:
+  contents: read
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [osrm, valhalla, graphhopper]
+    env:
+      SCOPE: ${{ inputs.scope }}
+      ENGINES: ${{ inputs.engines }}
+      ENGINE: ${{ matrix.engine }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skip engines not requested
+        id: want
+        run: |
+          case " $ENGINES " in *" $ENGINE "*) echo run=1 >> "$GITHUB_OUTPUT";; *) echo run=0 >> "$GITHUB_OUTPUT";; esac
+      - uses: actions/cache@v4
+        if: steps.want.outputs.run == '1'
+        with:
+          path: /tmp/osm-cache
+          key: osm-extract-${{ github.run_id }}
+          restore-keys: osm-extract-
+      - name: Fetch OSM extract
+        if: steps.want.outputs.run == '1'
+        env:
+          OSM_CACHE_DIR: /tmp/osm-cache
+        run: sh scripts/ci/fetch-osm-extract.sh /tmp/kunde-osm
+      - name: Cut the experiment area
+        if: steps.want.outputs.run == '1'
+        run: |
+          mkdir -p /tmp/area
+          if [ "$SCOPE" = almaty ]; then
+            sudo apt-get install -y --no-install-recommends osmium-tool > /dev/null
+            # Almaty city and surroundings (Medeu, airport): lon 76.70-77.25, lat 43.05-43.45
+            osmium extract -b 76.70,43.05,77.25,43.45 -s smart --overwrite -o /tmp/area/area.osm.pbf /tmp/kunde-osm/kazakhstan.osm.pbf
+          else
+            cp /tmp/kunde-osm/kazakhstan.osm.pbf /tmp/area/area.osm.pbf
+          fi
+          ls -l /tmp/area
+      - name: Build, serve and measure
+        if: steps.want.outputs.run == '1'
+        run: bash scripts/routing/run-engine.sh "$ENGINE" /tmp/area/area.osm.pbf /tmp/bench-out
+      - name: Publish summary
+        if: always() && steps.want.outputs.run == '1'
+        run: |
+          { echo "## $ENGINE / $SCOPE"; cat /tmp/bench-out/results.md; } >> "$GITHUB_STEP_SUMMARY" || true
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.want.outputs.run == '1'
+        with:
+          name: routing-${{ matrix.engine }}-${{ inputs.scope }}
+          path: |
+            /tmp/bench-out/results.md
+            /tmp/bench-out/routes-*.json
+            /tmp/bench-out/gh-*.log
+            /tmp/bench-out/gh-*.time
