@@ -31,6 +31,7 @@
     const config = await response.json();
     if (!config.styleUrl) throw new Error('Configure styleUrl in config.json');
     const searchBase = core.parseConfigUrl(config.searchUrl, true);
+    const routingBase = core.parseConfigUrl(config.routingUrl, true);
     const lightUrl = new URL(config.styleUrl, window.location.href);
     if (!['http:', 'https:'].includes(lightUrl.protocol)) throw new Error('Invalid style URL');
     // The dark style lives next to the light one (style.json -> style-dark.json) unless configured explicitly.
@@ -79,10 +80,17 @@
     // Places (Phase 3): a clustered GeoJSON source. It is injected into every style we pass to setStyle, otherwise a theme or
     // language switch would remove it. `placesData` always holds the latest results.
     let placesData = {type: 'FeatureCollection', features: []};
+    let routeData = {type: 'FeatureCollection', features: []};
     let placesMode = null; // 'viewport' | 'nearby' | null; drives the tile-POI-dot visibility in localizedStyle
     function withPlaces(style, theme) {
       const dark = theme === 'dark';
       const stroke = dark ? '#0b1220' : '#ffffff';
+      style.sources.route = {type: 'geojson', data: routeData};
+      style.layers.push(
+        {id: 'route-casing', type: 'line', source: 'route', layout: {'line-cap': 'round', 'line-join': 'round'}, paint: {
+          'line-color': stroke, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 5, 16, 12], 'line-opacity': 0.9}},
+        {id: 'route-line', type: 'line', source: 'route', layout: {'line-cap': 'round', 'line-join': 'round'}, paint: {
+          'line-color': dark ? '#7aa2f7' : '#2563eb', 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.5, 16, 7]}});
       style.sources.places = {type: 'geojson', data: placesData, cluster: true, clusterRadius: 46, clusterMaxZoom: 15};
       style.layers.push(
         {id: 'places-clusters', type: 'circle', source: 'places', filter: ['has', 'point_count'], paint: {
@@ -194,7 +202,7 @@
       buildChips(); renderFavorites();
       if (placesMode) renderPlacesList(placesInfo);
       if (items.length && !resultsEl.hidden) renderResults();
-      if (selected) showCard(selected);
+      if (routeOpen) { renderRouteLabels(); buildRoute(); } else if (selected) showCard(selected);
       setStatus(tr('langChanged'));
     });
 
@@ -204,6 +212,8 @@
     const chipsEl = $('chips'), placesPanel = $('places-panel'), placesList = $('places-list'), placesStateEl = $('places-state');
     const favPanel = $('favorites-panel'), favList = $('favorites-list'), favBtn = $('favorites-btn');
     let favOpen = false, placeItems = [];
+    const routePanel = $('route-panel');
+    let routeOpen = false;
     const activeCats = new Set();
     const isMobile = () => window.matchMedia('(max-width: 719px)').matches;
     const syncSheetHeight = () => {
@@ -219,9 +229,10 @@
     });
     // One panel at a time: card > search results/messages > saved places > places list.
     function refreshSheetVisibility() {
-      favPanel.hidden = !(favOpen && card.hidden && resultsEl.hidden && stateEl.hidden);
-      placesPanel.hidden = !(placesMode && card.hidden && resultsEl.hidden && stateEl.hidden && !favOpen);
-      sheet.hidden = stateEl.hidden && resultsEl.hidden && card.hidden && placesPanel.hidden && favPanel.hidden;
+      routePanel.hidden = !routeOpen;
+      favPanel.hidden = !(favOpen && card.hidden && resultsEl.hidden && stateEl.hidden && !routeOpen);
+      placesPanel.hidden = !(placesMode && card.hidden && resultsEl.hidden && stateEl.hidden && !favOpen && !routeOpen);
+      sheet.hidden = stateEl.hidden && resultsEl.hidden && card.hidden && placesPanel.hidden && favPanel.hidden && !routeOpen;
       syncSheetHeight();
     }
 
@@ -238,6 +249,7 @@
       marker = new maplibregl.Marker({element: makeMarkerElement(), anchor: 'bottom'}).setLngLat(lngLat).addTo(map);
     }
     function showCard(place) {
+      if (routeOpen) closeRoute(false);
       selected = place;
       const poi = place.poi || null;
       // Records keep their raw data so a language switch re-localizes an open card.
@@ -323,7 +335,8 @@
       }
       const route = $('route-place');
       route.href = core.routeUrl(place.lat, place.lon);
-      route.title = tr('routeHint');
+      route.title = routeClient ? tr('routeTitle') : tr('routeHint');
+      if (routeClient) { route.removeAttribute('target'); route.removeAttribute('rel'); }
       route.querySelector('span').textContent = tr('route');
       syncSaveButton();
       $('share-place').querySelector('span').textContent = tr('share');
@@ -385,6 +398,7 @@
 
     map.on('click', event => {
       input.blur();
+      if (pickingStart) { setRouteStart({lat: event.lngLat.lat, lon: event.lngLat.lng, kind: 'map'}); return; }
       if (map.queryRenderedFeatures(event.point, {layers: ['places-points', 'places-clusters']}).length) return; // handled below
       const labelLayers = ((map.getStyle && map.getStyle().layers) || []).filter(l => l.metadata && l.metadata['kunde:text']).map(l => l.id);
       const names = map.queryRenderedFeatures(event.point, {layers: labelLayers})
@@ -886,6 +900,146 @@
       });
     }
     $('locate').addEventListener('click', () => locate());
+
+    // ---- routing (Phase 4) -------------------------------------------------------------------------------------
+    // The start defaults to the device position (used for this one request only, sent to our routing API, never stored or logged);
+    // when it is unavailable the user taps the map. Without a configured routing API the button stays an external OpenStreetMap link.
+    const routeClient = routingBase ? core.createRouteClient({baseUrl: routingBase}) : null;
+    let routeFrom = null, routeDest = null, routeMode = 'car', routeAbort = null, pickingStart = false;
+    const routeStateEl = $('route-state'), routeStepsEl = $('route-steps'), routeSummaryEl = $('route-summary');
+
+    function setRouteData(coords) {
+      routeData = {type: 'FeatureCollection', features: coords ? [{type: 'Feature', properties: {}, geometry: {type: 'LineString', coordinates: coords}}] : []};
+      const source = map.getSource && map.getSource('route');
+      if (source && source.setData) source.setData(routeData);
+    }
+    const pointLabel = p => !p ? '' : p.kind === 'me' ? tr('myLocation') : p.kind === 'place' ? p.title : core.formatCoords(p.lat, p.lon);
+    function renderRouteLabels() {
+      $('route-title').textContent = tr('routeTitle');
+      $('route-from-label').textContent = tr('routeStart');
+      $('route-to-label').textContent = tr('routeEnd');
+      $('route-close').setAttribute('aria-label', tr('routeClose'));
+      $('route-pick').textContent = tr('pickOnMap');
+      $('route-swap').textContent = tr('routeSwap');
+      routeStepsEl.setAttribute('aria-label', tr('routeSteps'));
+      $('route-note').textContent = tr('routeNote');
+      for (const button of document.querySelectorAll('#route-modes .mode')) button.textContent = tr({car: 'modeCar', foot: 'modeFoot', bike: 'modeBike'}[button.dataset.mode]);
+      const from = $('route-from');
+      from.textContent = routeFrom ? pointLabel(routeFrom) : tr('routeNeedStart');
+      from.classList.toggle('pending', !routeFrom);
+      $('route-to').textContent = pointLabel(routeDest);
+      $('route-external').textContent = tr('routeExternal');
+    }
+    function showRouteState(kind, text, extra) {
+      routeStateEl.replaceChildren();
+      routeStateEl.className = 'state' + (kind === 'error' ? ' error' : kind === 'warn' ? ' warn' : '');
+      if (kind === 'loading') { const spinner = document.createElement('span'); spinner.className = 'spinner'; routeStateEl.append(spinner); }
+      const body = document.createElement('div'); body.className = 'grow'; body.textContent = text;
+      if (extra) { const small = document.createElement('small'); small.textContent = extra; body.append(small); }
+      routeStateEl.append(body);
+      routeStateEl.hidden = false;
+    }
+    function setPickingStart(on) {
+      pickingStart = on;
+      document.body.classList.toggle('picking-start', on);
+      if (on) { showRouteState('info', tr('pickHint')); setStatus(tr('pickHint')); }
+    }
+    function resetRouteResult() {
+      routeSummaryEl.hidden = true; routeStepsEl.hidden = true; routeStepsEl.replaceChildren();
+      $('route-external').hidden = true;
+      setRouteData(null);
+    }
+    function openRoute() {
+      if (!selected || !routeClient) return;
+      routeDest = {lat: selected.lat, lon: selected.lon, kind: 'place', title: selected.title};
+      routeFrom = null; routeOpen = true; card.hidden = true;
+      resetRouteResult(); renderRouteLabels(); refreshSheetVisibility(); setExpanded(false);
+      if (!navigator.geolocation) { setPickingStart(true); return; }
+      showRouteState('loading', tr('locating'));
+      navigator.geolocation.getCurrentPosition(({coords: position}) => {
+        if (!routeOpen) return;
+        setRouteStart({lat: position.latitude, lon: position.longitude, kind: 'me'});
+      }, () => { if (routeOpen) setPickingStart(true); }, {enableHighAccuracy: true, timeout: 12000, maximumAge: 30000});
+    }
+    function setRouteStart(point) {
+      setPickingStart(false);
+      routeFrom = point;
+      renderRouteLabels();
+      buildRoute();
+    }
+    const ROUTE_ERRORS = {outside_coverage: 'routeOutside', no_route: 'routeNoRoute', no_road_near_point: 'routeNoRoad', route_too_long: 'routeTooLong', points_too_close: 'routeTooClose'};
+    function buildRoute() {
+      if (!routeOpen || !routeFrom || !routeDest) return;
+      if (routeAbort) routeAbort.abort();
+      routeAbort = new AbortController();
+      const mine = routeAbort;
+      resetRouteResult();
+      showRouteState('loading', tr('routeBuilding'));
+      routeClient.route({from: routeFrom, to: routeDest, mode: routeMode, lang, signal: mine.signal, onSlow: () => showRouteState('loading', tr('routeBuilding'), tr('waking'))})
+        .then(route => { if (mine === routeAbort && routeOpen) showRoute(route); })
+        .catch(error => {
+          if (error.code === 'aborted' || mine !== routeAbort || !routeOpen) return;
+          const key = ROUTE_ERRORS[error.detail];
+          if (error.code === 'rate_limited') showRouteState('warn', tr('rateLimited').replace('{n}', error.retryAfter || 10));
+          else showRouteState('error', tr(key || 'routeFailed'));
+          if (!key && error.code !== 'rate_limited') { const link = $('route-external'); link.href = core.routeUrl(routeDest.lat, routeDest.lon); link.hidden = false; }
+        });
+    }
+    function showRoute(route) {
+      routeStateEl.hidden = true;
+      setRouteData(route.coordinates);
+      $('route-total').textContent = core.formatDistance(route.distance, lang) + ' · ' + core.formatDuration(route.duration, lang);
+      $('route-narration').textContent = route.narrationLang !== lang ? tr('routeNarrationRu') : '';
+      $('route-narration').hidden = route.narrationLang === lang;
+      routeSummaryEl.hidden = false;
+      routeStepsEl.replaceChildren();
+      for (const step of route.steps) {
+        const li = document.createElement('li');
+        li.tabIndex = 0;
+        const text = document.createElement('span'); text.textContent = step.instruction;
+        const dist = document.createElement('small'); dist.textContent = step.distance ? core.formatDistance(step.distance, lang) : '';
+        li.append(text, dist);
+        const go = () => flyToPlace(step.lon, step.lat, 17);
+        li.addEventListener('click', go);
+        li.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+        routeStepsEl.append(li);
+      }
+      routeStepsEl.hidden = !route.steps.length;
+      if (route.bbox) {
+        const bottom = isMobile() && !sheet.hidden ? Math.min(sheet.offsetHeight, window.innerHeight * 0.62) : 0;
+        map.fitBounds([[route.bbox[0], route.bbox[1]], [route.bbox[2], route.bbox[3]]], {padding: {top: 90, left: isMobile() ? 40 : 440, right: 40, bottom: bottom + 40}, maxZoom: 17, duration: 800, essential: false});
+      }
+      syncSheetHeight();
+      setStatus(core.formatDistance(route.distance, lang) + ' · ' + core.formatDuration(route.duration, lang));
+    }
+    function closeRoute(restoreCard = true) {
+      if (routeAbort) routeAbort.abort();
+      routeAbort = null; routeOpen = false;
+      setPickingStart(false);
+      resetRouteResult();
+      if (restoreCard && selected) card.hidden = false;
+      refreshSheetVisibility();
+    }
+    $('route-close').addEventListener('click', () => closeRoute(true));
+    $('route-pick').addEventListener('click', () => setPickingStart(!pickingStart));
+    $('route-swap').addEventListener('click', () => {
+      if (!routeFrom || !routeDest) return;
+      const end = routeFrom.kind === 'place' ? routeFrom : {lat: routeFrom.lat, lon: routeFrom.lon, kind: routeFrom.kind};
+      routeFrom = routeDest; routeDest = end;
+      renderRouteLabels(); buildRoute();
+    });
+    for (const button of document.querySelectorAll('#route-modes .mode')) {
+      button.addEventListener('click', () => {
+        routeMode = button.dataset.mode;
+        for (const other of document.querySelectorAll('#route-modes .mode')) other.setAttribute('aria-pressed', String(other === button));
+        buildRoute();
+      });
+    }
+    $('route-place').addEventListener('click', event => {
+      if (!routeClient) return; // no routing API configured: the link opens OpenStreetMap directions as before
+      event.preventDefault();
+      openRoute();
+    });
 
     applyLanguage();
     buildChips();

@@ -32,6 +32,13 @@
       openNow: 'Открыто', closedNow: 'Закрыто', open247: 'Круглосуточно', untilT: 'до {t}', opensAt: 'откроется в {t}', opensDay: 'откроется {d} в {t}',
       hours: 'Часы работы', hoursOsm: 'Часы работы (по данным OSM)', phone: 'Телефон', website: 'Сайт', address: 'Адрес', brand: 'Сеть',
       route: 'Маршрут', routeHint: 'Откроется OpenStreetMap с маршрутом до этого места', save: 'Сохранить', saved: 'Сохранено',
+      routeTitle: 'Маршрут', routeFrom: 'Откуда', routeTo: 'Куда', myLocation: 'Моё местоположение', pickOnMap: 'Выбрать на карте', pickHint: 'Нажмите на карту, чтобы задать начало маршрута',
+      modeCar: 'Авто', modeFoot: 'Пешком', modeBike: 'Велосипед', routeBuilding: 'Строим маршрут…', routeClose: 'Закрыть маршрут', routeSteps: 'Пошагово',
+      routeNote: 'Время в пути рассчитано по данным OpenStreetMap без учёта пробок и перекрытий.', routeNarrationRu: 'Подсказки показаны на русском',
+      routeNoRoute: 'Маршрут не найден', routeNoRoad: 'Рядом с точкой нет дороги подходящего типа', routeOutside: 'Маршруты доступны только по Казахстану',
+      routeTooLong: 'Слишком длинный маршрут для этого вида транспорта', routeFailed: 'Не удалось построить маршрут', routeTooClose: 'Начало и конец совпадают',
+      routeNeedStart: 'Укажите начало маршрута', routeExternal: 'Открыть в OpenStreetMap', routeSwap: 'Поменять местами', routeStart: 'Начало', routeEnd: 'Конец',
+      hourShort: 'ч', minuteShort: 'мин',
       favorites: 'Сохранённые', favoritesEmpty: 'Пока ничего не сохранено. Нажмите «Сохранить» в карточке места.',
       favoritesNote: 'Хранится только на этом устройстве', remove: 'Удалить', savedToast: 'Добавлено в сохранённые', removedToast: 'Удалено из сохранённых',
       clusterOf: 'Группа мест: {n}', meters: 'м', kilometers: 'км', placeFromLink: 'Место по ссылке', backToList: 'Назад к списку',
@@ -57,6 +64,13 @@
       openNow: 'Ашық', closedNow: 'Жабық', open247: 'Тәулік бойы', untilT: '{t} дейін', opensAt: '{t} ашылады', opensDay: '{d} {t} ашылады',
       hours: 'Жұмыс уақыты', hoursOsm: 'Жұмыс уақыты (OSM деректері)', phone: 'Телефон', website: 'Сайт', address: 'Мекенжай', brand: 'Желі',
       route: 'Маршрут', routeHint: 'Осы жерге маршрут бар OpenStreetMap ашылады', save: 'Сақтау', saved: 'Сақталды',
+      routeTitle: 'Маршрут', routeFrom: 'Қайдан', routeTo: 'Қайда', myLocation: 'Менің орным', pickOnMap: 'Картадан таңдау', pickHint: 'Маршрут басталатын жерді картадан басыңыз',
+      modeCar: 'Көлік', modeFoot: 'Жаяу', modeBike: 'Велосипед', routeBuilding: 'Маршрут құрылуда…', routeClose: 'Маршрутты жабу', routeSteps: 'Қадамдар',
+      routeNote: 'Жол уақыты OpenStreetMap деректері бойынша есептелген, кептелістер мен жабылған жолдар ескерілмейді.', routeNarrationRu: 'Нұсқаулар орыс тілінде көрсетіледі',
+      routeNoRoute: 'Маршрут табылмады', routeNoRoad: 'Нүктенің маңында қолайлы жол жоқ', routeOutside: 'Маршруттар тек Қазақстан бойынша қолжетімді',
+      routeTooLong: 'Бұл көлік түріне маршрут тым ұзақ', routeFailed: 'Маршрутты құру мүмкін болмады', routeTooClose: 'Бастапқы және соңғы нүкте сәйкес келеді',
+      routeNeedStart: 'Маршрут басын көрсетіңіз', routeExternal: 'OpenStreetMap-та ашу', routeSwap: 'Орындарын ауыстыру', routeStart: 'Басы', routeEnd: 'Соңы',
+      hourShort: 'сағ', minuteShort: 'мин',
       favorites: 'Сақталғандар', favoritesEmpty: 'Әзірге ештеңе сақталмаған. Орын карточкасында «Сақтау» түймесін басыңыз.',
       favoritesNote: 'Тек осы құрылғыда сақталады', remove: 'Жою', savedToast: 'Сақталғандарға қосылды', removedToast: 'Сақталғандардан жойылды',
       clusterOf: 'Орындар тобы: {n}', meters: 'м', kilometers: 'км', placeFromLink: 'Сілтемедегі орын', backToList: 'Тізімге оралу',
@@ -82,6 +96,13 @@
       openNow: 'Open', closedNow: 'Closed', open247: 'Open 24/7', untilT: 'until {t}', opensAt: 'opens at {t}', opensDay: 'opens {d} at {t}',
       hours: 'Opening hours', hoursOsm: 'Opening hours (from OSM)', phone: 'Phone', website: 'Website', address: 'Address', brand: 'Brand',
       route: 'Directions', routeHint: 'Opens OpenStreetMap with directions to this place', save: 'Save', saved: 'Saved',
+      routeTitle: 'Route', routeFrom: 'From', routeTo: 'To', myLocation: 'My location', pickOnMap: 'Choose on map', pickHint: 'Tap the map to set the start of the route',
+      modeCar: 'Drive', modeFoot: 'Walk', modeBike: 'Cycle', routeBuilding: 'Building the route…', routeClose: 'Close route', routeSteps: 'Step by step',
+      routeNote: 'Travel time comes from OpenStreetMap speed data and ignores traffic and closures.', routeNarrationRu: 'Directions are shown in Russian',
+      routeNoRoute: 'No route found', routeNoRoad: 'No suitable road near the point', routeOutside: 'Routes are available in Kazakhstan only',
+      routeTooLong: 'This route is too long for the selected mode', routeFailed: 'Could not build the route', routeTooClose: 'Start and end are the same',
+      routeNeedStart: 'Set the start of the route', routeExternal: 'Open in OpenStreetMap', routeSwap: 'Swap', routeStart: 'Start', routeEnd: 'End',
+      hourShort: 'h', minuteShort: 'min',
       favorites: 'Saved places', favoritesEmpty: 'Nothing saved yet. Tap “Save” on a place card.',
       favoritesNote: 'Stored on this device only', remove: 'Remove', savedToast: 'Added to saved places', removedToast: 'Removed from saved places',
       clusterOf: 'Group of {n} places', meters: 'm', kilometers: 'km', placeFromLink: 'Place from link', backToList: 'Back to list',
@@ -226,8 +247,11 @@
           const retryAfter = Number.parseInt(response.headers?.get?.('Retry-After') ?? '', 10);
           throw new SearchError('rate_limited', {retryAfter: Number.isFinite(retryAfter) ? Math.min(retryAfter, 120) : 10});
         }
-        if (response.status === 400) throw new SearchError('bad_request');
-        if (response.status === 404) throw new SearchError('not_found');
+        if (response.status === 400 || response.status === 404) {
+          let detail = '';
+          try { detail = String((await response.json()).error || '').slice(0, 60); } catch (_) { /* body is optional */ }
+          throw new SearchError(response.status === 400 ? 'bad_request' : 'not_found', {detail});
+        }
         if (!response.ok) throw new SearchError('unavailable', {status: response.status, transient: response.status >= 500});
         return await response.json();
       } catch (error) {
@@ -384,6 +408,56 @@
   /** Link to external directions (OpenStreetMap). Used until KUNDE routing exists; no coordinates are sent by us. */
   function routeUrl(lat, lon) {
     return 'https://www.openstreetmap.org/directions?from=&to=' + encodeURIComponent(lat.toFixed(5) + ',' + lon.toFixed(5));
+  }
+
+  /** "1 h 05 min" / "12 min" / "<1 min" in the UI language. */
+  function formatDuration(seconds, lang) {
+    if (!Number.isFinite(seconds) || seconds < 0) return '';
+    const total = Math.round(seconds / 60);
+    if (total < 1) return '<1 ' + t(lang, 'minuteShort');
+    const hours = Math.floor(total / 60), minutes = total % 60;
+    return hours ? hours + ' ' + t(lang, 'hourShort') + (minutes ? ' ' + minutes + ' ' + t(lang, 'minuteShort') : '') : minutes + ' ' + t(lang, 'minuteShort');
+  }
+
+  const ROUTE_MODES = ['car', 'foot', 'bike'];
+  const MAX_ROUTE_POINTS = 100000, MAX_ROUTE_STEPS = 600;
+  const inRange = (lon, lat) => Number.isFinite(lon) && Number.isFinite(lat) && Math.abs(lon) <= 180 && Math.abs(lat) <= 90;
+
+  /** Validates a /v1/route reply; returns null for anything malformed. All text fields stay plain strings (rendered with textContent). */
+  function validRoute(body) {
+    if (!body || typeof body !== 'object' || !ROUTE_MODES.includes(body.mode)) return null;
+    const distance = Number(body.distance_m), duration = Number(body.duration_s);
+    const coords = body.geometry && body.geometry.type === 'LineString' ? body.geometry.coordinates : null;
+    if (!Number.isFinite(distance) || distance < 0 || !Number.isFinite(duration) || duration < 0) return null;
+    if (!Array.isArray(coords) || coords.length < 2 || coords.length > MAX_ROUTE_POINTS) return null;
+    for (const c of coords) if (!Array.isArray(c) || !inRange(Number(c[0]), Number(c[1]))) return null;
+    const steps = [];
+    for (const step of (Array.isArray(body.steps) ? body.steps.slice(0, MAX_ROUTE_STEPS) : [])) {
+      if (!step || typeof step.instruction !== 'string' || !Array.isArray(step.location) || !inRange(Number(step.location[0]), Number(step.location[1]))) continue;
+      steps.push({instruction: step.instruction.slice(0, 300), street: typeof step.street === 'string' ? step.street.slice(0, 120) : '',
+        distance: Math.max(0, Number(step.distance_m) || 0), duration: Math.max(0, Number(step.duration_s) || 0), type: Number(step.type) || 0,
+        lon: Number(step.location[0]), lat: Number(step.location[1])});
+    }
+    const bbox = Array.isArray(body.bbox) && body.bbox.length === 4 && body.bbox.every(Number.isFinite) ? body.bbox : null;
+    return {mode: body.mode, distance, duration, coordinates: coords.map(c => [Number(c[0]), Number(c[1])]), steps, bbox,
+      narrationLang: ['ru', 'kk', 'en'].includes(body.instruction_language) ? body.instruction_language : 'ru'};
+  }
+
+  /** Routing client (GET /v1/route). No caching: requests are position specific. Errors carry `detail` = the API error code. */
+  function createRouteClient(options) {
+    const {baseUrl} = options;
+    const getJson = createFetcher({retries: 0, ...options});
+    const point = p => p.lat.toFixed(5) + ',' + p.lon.toFixed(5);
+    return {
+      async route({from, to, mode = 'car', lang = 'ru', signal, onSlow}) {
+        if (!baseUrl) throw new SearchError('not_configured');
+        if (!ROUTE_MODES.includes(mode) || !from || !to || ![from.lat, from.lon, to.lat, to.lon].every(Number.isFinite)) throw new SearchError('bad_request');
+        const body = await getJson(baseUrl + '/v1/route?from=' + point(from) + '&to=' + point(to) + '&mode=' + mode + '&lang=' + lang, {signal, onSlow});
+        const route = validRoute(body);
+        if (!route) throw new SearchError('invalid_response');
+        return route;
+      },
+    };
   }
 
   function createPlacesClient(options) {
@@ -594,7 +668,7 @@
     MIN_CHARS, MAX_CHARS, LANGS, STRINGS, t, normalizeQuery, isSearchable, kindLabel, zoomForKind, displayName,
     formatCoords, parseConfigUrl, validPlace, SearchError, createSearchClient, parsePlaceHash, buildPlaceHash,
     CATEGORIES, CATEGORY_COLORS, CATEGORY_LABELS, PLACE_ID, categoryLabel, placeKindLabel, safeWebsite, telHref, validPoi, poiTitle,
-    formatDistance, routeUrl, createPlacesClient, parseOpeningHours, openStatus, hoursTable, openLabel, WEEKDAY_LABELS,
+    formatDistance, formatDuration, routeUrl, validRoute, createRouteClient, ROUTE_MODES, createPlacesClient, parseOpeningHours, openStatus, hoursTable, openLabel, WEEKDAY_LABELS,
     favoriteKey, isFavorite, toggleFavorite, parseFavorites, validFavorite, favoriteTitle,
   };
 });

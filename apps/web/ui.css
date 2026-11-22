@@ -222,3 +222,25 @@ li.fav .row.grow { flex: 1; min-width: 0; }
   .chips { margin-right: calc(var(--touch) + 8px - 2px); }
   .chip { height: 44px; }
 }
+
+/* ---- route panel ---- */
+.route-points { display: flex; flex-direction: column; gap: 6px; padding: 4px 14px 8px; }
+.route-point { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 4px 4px 2px; }
+.route-dot { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 3px solid var(--primary); background: var(--surface); box-sizing: border-box; }
+.route-dot.to { background: var(--primary); }
+.route-label { flex: none; width: 56px; font-size: 12px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; color: var(--text-2); }
+.route-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; }
+.route-value.pending { color: var(--text-2); font-weight: 500; }
+.route-modes { display: flex; gap: 8px; padding: 2px 14px 8px; }
+.route-modes .mode { flex: 1; min-height: var(--touch); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-weight: 600; font-size: 14px; }
+.route-modes .mode:hover { background: var(--surface-hover); }
+.route-modes .mode[aria-pressed="true"] { background: color-mix(in srgb, var(--primary) 14%, var(--surface)); border-color: var(--primary); color: var(--primary); }
+.route-summary { display: flex; flex-direction: column; gap: 2px; padding: 4px 16px 6px; }
+.route-summary strong { font-size: 20px; letter-spacing: -.2px; }
+.route-summary .muted { margin: 0; }
+.route-steps { list-style: none; margin: 0; padding: 4px 8px 6px; max-height: 38vh; overflow: auto; }
+.route-steps li { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; padding: 10px 8px; border-radius: var(--radius-sm); cursor: pointer; font-size: 14px; line-height: 1.35; }
+.route-steps li:hover, .route-steps li:focus-visible { background: var(--surface-hover); }
+.route-steps li small { flex: none; color: var(--text-2); font-size: 12px; white-space: nowrap; }
+.route-external { margin: 4px 14px 10px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+body.picking-start .maplibregl-canvas { cursor: crosshair; }

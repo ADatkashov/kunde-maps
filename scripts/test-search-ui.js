@@ -28,6 +28,7 @@ const MOCK_MAPLIBRE = `(function () {
     getLayer(id) { return {id}; }
     setFilter(layer, f) { window.__calls.filters.push([layer, f]); }
     easeTo(o) { window.__calls.easeTo.push(o); }
+    fitBounds(b, o) { window.__calls.fit = [b, o]; }
     getCanvas() { return {style: {}}; }
     addControl() {}
     getCenter() { return {lng: this.o.center[0], lat: this.o.center[1]}; }
@@ -47,7 +48,7 @@ const MOCK_MAPLIBRE = `(function () {
 })();
 `;
 
-async function openPage(browser, {viewport = {width: 1280, height: 800}, search = true, handler, colorScheme = 'light', hash = '', mobile = false, places, geo, storage} = {}) {
+async function openPage(browser, {viewport = {width: 1280, height: 800}, search = true, handler, colorScheme = 'light', hash = '', mobile = false, places, geo, storage, routing} = {}) {
   const context = await browser.newContext({viewport, colorScheme, isMobile: mobile, hasTouch: mobile,
     ...(geo ? {permissions: ['geolocation'], geolocation: geo} : {})});
   const page = await context.newPage();
@@ -64,7 +65,17 @@ async function openPage(browser, {viewport = {width: 1280, height: 800}, search 
     return route.fulfill({status: 200, contentType: 'application/javascript', body: 'window.pmtiles={Protocol:class{constructor(){this.tile=()=>{}}}};'});
   });
   await page.route('**/config.json', route => route.fulfill({status: 200, contentType: 'application/json', body: JSON.stringify(
-    {styleUrl: '/style.json', tileUrl: 'https://tiles.test/k.pmtiles', ...(search ? {searchUrl: SEARCH} : {})})}));
+    {styleUrl: '/style.json', tileUrl: 'https://tiles.test/k.pmtiles', ...(search ? {searchUrl: SEARCH} : {}), ...(routing ? {routingUrl: 'https://route.test'} : {})})}));
+  const routeRequests = [];
+  if (routing) {
+    await page.route('https://route.test/**', async route => {
+      if (route.request().method() === 'OPTIONS') return route.fulfill({status: 204, headers: CORS});
+      const url = new URL(route.request().url());
+      routeRequests.push(url.pathname + url.search);
+      const reply = await routing(url, routeRequests.length);
+      return route.fulfill({status: reply.status || 200, headers: {...CORS, 'content-type': 'application/json', ...(reply.headers || {})}, body: JSON.stringify(reply.body ?? reply)});
+    });
+  }
   await page.route('https://tiles.test/**', route => route.fulfill({status: route.request().method() === 'OPTIONS' ? 204 : 206,
     headers: {...CORS, 'access-control-allow-headers': 'range', 'content-range': 'bytes 0-15/100'}, body: route.request().method() === 'OPTIONS' ? '' : '0123456789abcdef'}));
   await page.route(SEARCH + '/**', async route => {
@@ -81,13 +92,127 @@ async function openPage(browser, {viewport = {width: 1280, height: 800}, search 
   });
   await page.goto(WEB + '/' + hash, {waitUntil: 'domcontentloaded'});
   await page.locator('#status').filter({hasText: 'Карта загружена'}).waitFor({timeout: 15000});
-  return {page, context, errors, requests, placeRequests};
+  return {page, context, errors, requests, placeRequests, routeRequests};
 }
 
 const results = page => page.locator('#search-results [role=option]');
 const calls = page => page.evaluate(() => window.__calls);
 
+const ROUTE_REPLY = {mode: 'car', distance_m: 3510, duration_s: 312, bbox: [76.9456, 43.238, 76.9567, 43.261], instruction_language: 'ru',
+  geometry: {type: 'LineString', coordinates: [[76.9456, 43.238], [76.95, 43.25], [76.9567, 43.261]]},
+  steps: [{instruction: 'Двигайтесь на север по проспекту Достык.', type: 1, street: 'Достык', distance_m: 3200, duration_s: 280, location: [76.9456, 43.238]},
+          {instruction: 'Вы прибыли в пункт назначения.', type: 5, street: '', distance_m: 0, duration_s: 0, location: [76.9567, 43.261]}]};
+async function selectAlmaty(page) {
+  await page.locator('#search-query').fill('Алматы');
+  await results(page).first().click();
+  await page.locator('#selection').waitFor();
+}
+
 const tests = {
+  async 'route: builds a route from the device position, draws it, lists steps, switches mode and closes cleanly'(browser) {
+    const {page, context, routeRequests, errors} = await openPage(browser, {geo: {latitude: 43.2381234, longitude: 76.9456789}, routing: async url => url.searchParams.get('mode') === 'foot' ? {...ROUTE_REPLY, mode: 'foot', duration_s: 2400} : ROUTE_REPLY});
+    await selectAlmaty(page);
+    await page.locator('#route-place').click();
+    await page.locator('#route-steps li').first().waitFor();
+    assert.equal(routeRequests[0], '/v1/route?from=43.23812,76.94568&to=43.23640,76.94570&mode=car&lang=ru');  // 5 decimals, our API only
+    assert.equal(await page.locator('#route-panel').isVisible(), true);
+    assert.equal(await page.locator('#selection').isHidden(), true);
+    assert.equal(await page.locator('#route-from').innerText(), 'Моё местоположение');
+    assert.equal(await page.locator('#route-to').innerText(), 'Алматы');
+    assert.equal(await page.locator('#route-total').innerText(), '3.5 км · 5 мин');
+    assert.equal(await page.locator('#route-steps li').count(), 2);
+    assert.match(await page.locator('#route-note').innerText(), /без учёта пробок/);
+    const c = await calls(page);
+    assert.equal(c.sources.filter(([id]) => id === 'route').at(-1)[1].features[0].geometry.coordinates.length, 3);
+    assert.ok(c.fit && c.fit[0][0][0] === 76.9456, 'camera fits the route');
+    await page.locator('#route-steps li').first().click();
+    assert.equal((await calls(page)).flyTo.at(-1).center[0], 76.9456);
+    await page.locator('.mode[data-mode=foot]').click();
+    await page.waitForFunction(() => document.querySelector('#route-total').textContent.includes('40 мин'));
+    assert.match(routeRequests.at(-1), /mode=foot/);
+    assert.equal(await page.locator('.mode[data-mode=foot]').getAttribute('aria-pressed'), 'true');
+    await page.locator('#route-close').click();
+    assert.equal(await page.locator('#route-panel').isHidden(), true);
+    assert.equal(await page.locator('#selection').isVisible(), true);  // back to the card
+    assert.equal((await calls(page)).sources.filter(([id]) => id === 'route').at(-1)[1].features.length, 0);
+    assert.deepEqual(errors, []);
+    await context.close();
+  },
+  async 'route: without a device position the user taps the map to set the start'(browser) {
+    const {page, context, routeRequests} = await openPage(browser, {routing: async () => ROUTE_REPLY});
+    await selectAlmaty(page);
+    await page.locator('#route-place').click();
+    await page.locator('#route-state').filter({hasText: 'Нажмите на карту'}).waitFor();
+    assert.equal(routeRequests.length, 0, 'nothing is requested before a start exists');
+    assert.equal(await page.evaluate(() => document.body.classList.contains('picking-start')), true);
+    await page.evaluate(() => window.__map.fire('click', {lngLat: {lat: 43.25, lng: 76.95}, point: {x: 5, y: 5}}));
+    await page.locator('#route-steps li').first().waitFor();
+    assert.match(routeRequests[0], /^\/v1\/route\?from=43\.25000,76\.95000&to=43\.23640,76\.94570/);
+    assert.equal(await page.locator('#route-from').innerText(), '43.25000, 76.95000');
+    assert.equal(await page.locator('#selection').isHidden(), true, 'the map click set the start instead of opening a point card');
+    await page.locator('#route-swap').click();
+    await page.waitForFunction(() => document.querySelector('#route-from').textContent === 'Алматы');
+    assert.match(routeRequests.at(-1), /from=43\.23640,76\.94570&to=43\.25000,76\.95000/);
+    await context.close();
+  },
+  async 'route: API errors become clear messages and only unknown failures offer the OpenStreetMap fallback'(browser) {
+    let reply = {status: 404, body: {error: 'no_route'}};
+    const {page, context} = await openPage(browser, {geo: {latitude: 43.2, longitude: 76.9}, routing: async () => reply});
+    await selectAlmaty(page);
+    await page.locator('#route-place').click();
+    await page.locator('#route-state').filter({hasText: 'Маршрут не найден'}).waitFor();
+    assert.equal(await page.locator('#route-external').isHidden(), true);
+    for (const [r, text, fallback] of [[{status: 400, body: {error: 'outside_coverage'}}, 'только по Казахстану', false],
+        [{status: 404, body: {error: 'no_road_near_point'}}, 'нет дороги', false],
+        [{status: 400, body: {error: 'route_too_long'}}, 'Слишком длинный', false],
+        [{status: 502, body: {error: 'routing_unavailable'}}, 'Не удалось построить маршрут', true],
+        [{status: 429, headers: {'retry-after': '7'}, body: {error: 'rate_limited'}}, 'через 7 с', false]]) {
+      reply = r;
+      await page.locator('.mode[data-mode=bike]').click();
+      await page.locator('#route-state').filter({hasText: text}).waitFor();
+      assert.equal(await page.locator('#route-external').isVisible(), fallback, text);
+      await page.locator('.mode[data-mode=car]').click();
+      await page.waitForTimeout(50);
+    }
+    assert.match(await page.locator('#route-external').getAttribute('href'), /openstreetmap\.org\/directions\?from=&to=43\.2364/);
+    await context.close();
+  },
+  async 'route: texts follow the language and a Kazakh UI says the directions are in Russian'(browser) {
+    const {page, context} = await openPage(browser, {geo: {latitude: 43.2, longitude: 76.9}, routing: async () => ROUTE_REPLY});
+    await selectAlmaty(page);
+    await page.locator('#route-place').click();
+    await page.locator('#route-steps li').first().waitFor();
+    await page.locator('#language').click();  // ҚАЗ
+    await page.waitForFunction(() => document.querySelector('#route-title').textContent === 'Маршрут' && document.querySelector('#route-narration').textContent !== '');
+    assert.match(await page.locator('#route-narration').innerText(), /орыс тілінде/);
+    assert.equal(await page.locator('.mode[data-mode=foot]').innerText(), 'Жаяу');
+    await page.locator('#language').click();  // EN
+    await page.waitForFunction(() => document.querySelector('#route-title').textContent === 'Route');
+    await page.waitForFunction(() => document.querySelector('#route-total').textContent === '3.5 km · 5 min');
+    await context.close();
+  },
+  async 'route: instruction text is rendered as text, never as HTML'(browser) {
+    const evil = '<img src=x onerror="window.__pwned=1">';
+    const {page, context} = await openPage(browser, {geo: {latitude: 43.2, longitude: 76.9}, routing: async () => ({...ROUTE_REPLY, steps: [{...ROUTE_REPLY.steps[0], instruction: evil}]})});
+    await selectAlmaty(page);
+    await page.locator('#route-place').click();
+    await page.locator('#route-steps li').first().waitFor();
+    assert.equal(await page.locator('#route-steps li').first().innerText().then(t => t.split('\n')[0]), evil);
+    assert.equal(await page.evaluate(() => window.__pwned), undefined);
+    assert.equal(await page.locator('#route-steps img').count(), 0);
+    await context.close();
+  },
+  async 'route: selecting another place while a route is open replaces the panel with that place'(browser) {
+    const {page, context} = await openPage(browser, {geo: {latitude: 43.2, longitude: 76.9}, routing: async () => ROUTE_REPLY});
+    await selectAlmaty(page);
+    await page.locator('#route-place').click();
+    await page.locator('#route-steps li').first().waitFor();
+    await page.evaluate(() => window.__map.fire('click', {lngLat: {lat: 43.3, lng: 77.0}, point: {x: 1, y: 1}}));
+    await page.locator('#selection').waitFor();
+    assert.equal(await page.locator('#route-panel').isHidden(), true);
+    assert.equal((await calls(page)).sources.filter(([id]) => id === 'route').at(-1)[1].features.length, 0);
+    await context.close();
+  },
   async 'typing debounces to one request and renders real results'(browser) {
     const {page, errors, requests, context} = await openPage(browser, {handler: async () => ({results: [ALMATY, place(2, 'Алматы', 'address', 42.97, 76.87)]})});
     await page.locator('#search-query').pressSequentially('Алматы', {delay: 30});

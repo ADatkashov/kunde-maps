@@ -31,6 +31,10 @@ jobs:
         run: bash scripts/routing/build-graph.sh /tmp/kunde-osm/kazakhstan.osm.pbf /tmp/graph "$(cat /tmp/kunde-osm/SOURCE_URL)"
       - name: Smoke test with real routes
         run: bash scripts/routing/smoke-graph.sh /tmp/graph
+      - name: Build routing API image and run it end-to-end on the real graph
+        run: |
+          docker build -f infrastructure/routing/Dockerfile -t kunde-routing:ci .
+          bash scripts/routing/integration-api.sh /tmp/graph kunde-routing:ci
       - uses: actions/upload-artifact@v4
         with:
           name: kazakhstan-routing-graph
