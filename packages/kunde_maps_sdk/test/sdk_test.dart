@@ -553,6 +553,111 @@ void main() {
     );
   });
 
+  group('navigation HUD', () {
+    test('formatDistance rounds sensibly in every language', () {
+      expect(formatDistance(7, 'en'), '7 m');
+      expect(formatDistance(48, 'en'), '50 m');
+      expect(formatDistance(949, 'ru'), '950 м');
+      expect(formatDistance(1234, 'en'), '1.2 km');
+      expect(formatDistance(1234, 'kk'), '1,2 км');
+      expect(formatDistance(12000, 'ru'), '12,0 км');
+    });
+
+    testWidgets(
+      'shows the instruction, remaining distance, GPS and voice state; stop is the host\'s call',
+      (tester) async {
+        final route = MapRoute(_fixture);
+        final gps = _FakeLocation();
+        var stopped = 0;
+        final nav = NavigationController(
+          client: MapsClient(
+            _config(),
+            MockClient((_) async => http.Response('{}', 503)),
+            sleep: (_) async {},
+          ),
+          strings: const MapsStrings('en'),
+          mode: 'car',
+          destination: route.points.last,
+          route: route,
+          location: gps,
+          voiceGuide: _FakeVoice(),
+        );
+        addTearDown(nav.dispose);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: NavigationHud(
+                controller: nav,
+                onStop: () => stopped++,
+                now: DateTime(2026, 1, 1, 8, 0),
+              ),
+            ),
+          ),
+        );
+        // No fix yet: weak GPS is reported, the first manoeuvre is shown.
+        await tester.runAsync(nav.start);
+        await tester.pump();
+        expect(find.text('Weak GPS signal'), findsOneWidget);
+        expect(find.textContaining('Remaining:'), findsOneWidget);
+        expect(find.byIcon(Icons.volume_up), findsOneWidget);
+
+        await tester.tap(find.byIcon(Icons.volume_up));
+        await tester.pump();
+        expect(nav.voice, isFalse);
+        expect(find.byIcon(Icons.volume_off), findsOneWidget);
+
+        await tester.tap(find.text('End navigation'));
+        expect(stopped, 1);
+      },
+    );
+
+    testWidgets('arrival replaces the manoeuvre with the arrival message', (
+      tester,
+    ) async {
+      final route = MapRoute(_fixture);
+      final gps = _FakeLocation();
+      var t = DateTime.now();
+      final nav = NavigationController(
+        client: MapsClient(
+          _config(),
+          MockClient((_) async => http.Response('{}', 503)),
+          sleep: (_) async {},
+        ),
+        strings: const MapsStrings('ru'),
+        mode: 'car',
+        destination: route.points.last,
+        route: route,
+        location: gps,
+        voiceGuide: _FakeVoice(),
+        clock: () => t,
+      );
+      addTearDown(nav.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: NavigationHud(controller: nav, onStop: () {}),
+          ),
+        ),
+      );
+      await tester.runAsync(nav.start);
+      for (final point in _track(route)) {
+        t = t.add(const Duration(seconds: 1));
+        gps.fixes.add(LocationFix(point, 8, t));
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        if (nav.arrived) break;
+      }
+      for (var i = 0; i < 3 && !nav.arrived; i++) {
+        t = t.add(const Duration(seconds: 1));
+        gps.fixes.add(LocationFix(route.points.last, 8, t));
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      }
+      await tester.pump();
+      expect(nav.arrived, isTrue);
+      expect(find.text('Вы прибыли'), findsOneWidget);
+      expect(find.text('Завершить'), findsOneWidget);
+    });
+  });
+
   group('widgets', () {
     testWidgets(
       'RoutePreview shows distance, time, arrival and the no-traffic note, no price',

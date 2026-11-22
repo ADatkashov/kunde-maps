@@ -18,6 +18,7 @@ class MapsStrings {
 
   /// Message for a [MapsException.code].
   String error(String code) => this(switch (code) {
+    'gps' => 'gpsLost',
     'timeout' || 'network' => 'errNetwork',
     'rate' => 'errRate',
     'access' => 'errAccess',
@@ -67,6 +68,29 @@ class MapsStrings {
       'Геолокацияға рұқсат жоқ',
       'Location access is denied',
     ],
+    'stopNav': ['Завершить', 'Аяқтау', 'End navigation'],
+    'voiceOn': ['Голос включён', 'Дауыс қосулы', 'Voice on'],
+    'voiceOff': ['Голос выключен', 'Дауыс өшірулі', 'Voice off'],
+    'noVoice': [
+      'Голос недоступен на этом устройстве',
+      'Бұл құрылғыда дауыс қолжетімсіз',
+      'Voice is not available on this device',
+    ],
+    'rerouting': [
+      'Перестраиваем маршрут…',
+      'Бағыт қайта құрылуда…',
+      'Rerouting…',
+    ],
+    'weakGps': ['Слабый сигнал GPS', 'GPS сигналы әлсіз', 'Weak GPS signal'],
+    'gpsLost': [
+      'Геолокация недоступна',
+      'Геолокация қолжетімсіз',
+      'Location is unavailable',
+    ],
+    'retry': ['Повторить', 'Қайталау', 'Retry'],
+    'recenter': ['К моей позиции', 'Менің орныма', 'Recenter'],
+    'remaining': ['Осталось', 'Қалды', 'Remaining'],
+    'following': ['По маршруту', 'Бағыт бойынша', 'On route'],
     'distance': ['Расстояние', 'Қашықтық', 'Distance'],
     'duration': ['В пути', 'Жолда', 'Travel time'],
     'arrival': ['Прибытие', 'Келу уақыты', 'Arrival'],

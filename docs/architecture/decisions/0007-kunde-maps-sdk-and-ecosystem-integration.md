@@ -1,6 +1,6 @@
 # ADR 0007 — KUNDE Maps SDK and ecosystem integration
 
-Status: accepted for implementation (SDK 0.1.0 and Taxi routing integration). Date: 2026-11-22.
+Status: accepted for implementation (SDK 0.2.0 and the Taxi, Delivery and Executor integrations). Date: 2026-11-22.
 Scope: this repository (`kunde-maps`) and the KUNDE Super App repository (`kunde`).
 
 ## Context
@@ -57,8 +57,9 @@ map would otherwise copy the Maps app code.
    the courier or driver; coordinates are never logged; the subscription is a poll bound to the trip lifecycle (stops when the trip is no longer
    active), so there is no long-lived socket to leak. The SDK gives hosts `coarsen()` and keeps its own GPS track in memory only.
 9. **No new microservices.** Search, Routing and Web already exist. The SDK is a library; `kunde` gains one adapter class in the monolith.
-10. **Versioning and compatibility.** SemVer. Consumers pin a git tag (`sdk-vX.Y.Z`) of this repository
-    (`git: {url, path: packages/kunde_maps_sdk, ref}`). Public API additions are minor; removals/renames are major with one deprecated release
+10. **Versioning and compatibility.** SemVer. Consumers pin an immutable git ref of this repository
+    (`git: {url, path: packages/kunde_maps_sdk, ref}`): the release tag `sdk-vX.Y.Z` or, where tags cannot be created, the full commit SHA of the release
+    commit (the Super App uses the SHA; the version is recorded next to it in its `pubspec.yaml`). Public API additions are minor; removals/renames are major with one deprecated release
     first. The Maps API is versioned (`/v1`); the SDK ignores unknown fields. CI runs the SDK on Flutter **3.47.9 (Super App) and 3.50.1 (Maps
     app)** so neither side can break the other. The Maps Platform (tiles, search index, routing graph) updates independently of apps.
 11. **Map weight follows the need.** Address selection uses `LocationPicker` (one map, no navigation stack). `NavigationController` is only
@@ -67,11 +68,14 @@ map would otherwise copy the Maps app code.
 ## Integration plan and status
 | Step | Where | Status |
 | --- | --- | --- |
-| SDK extraction, Maps app consumes SDK, CI for both Flutter versions, live DEV contract test | `kunde-maps` | this change |
-| `KundeMapsRideRouting` + `maps` flag + capability | `kunde` backend | next PR |
-| Consumer Taxi: picker, route preview, driver on map | `kunde` mobile | after SDK tag |
-| Executor: driver navigation, Delivery job route | `kunde` mobile | after Taxi |
-| Consumer addresses (Food, Groceries, services), service-area check | `kunde` mobile | after Executor |
+| SDK extraction, Maps app consumes SDK, CI for both Flutter versions, live DEV contract test | `kunde-maps` | SDK 0.1.0 (merged) |
+| `NavigationView` / `NavigationHud` for guidance screens | `kunde-maps` | SDK 0.2.0 |
+| `KundeMapsRideRouting` + `MAPS_ENABLED` + `mapsEnabled` capability | `kunde` backend | merged (kunde #221) |
+| Route endpoints of active trips/deliveries for the assigned driver/courier | `kunde` backend | merged (kunde #222, #223) |
+| Consumer Taxi and Delivery: map picker, route preview, driver/courier on the map | `kunde` mobile | next PR |
+| Executor: Taxi and Delivery navigation | `kunde` mobile | next PR |
+| Android emulator E2E (real Maps, real backend, MapLibre) | `kunde` CI | with the client PRs |
+| Consumer addresses for Food, Groceries, home services; service-area check | `kunde` mobile | not started |
 
 ## Out of scope / limitations
 - No traffic, no live closures, no price. ETA is "typical time".

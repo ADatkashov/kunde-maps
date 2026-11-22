@@ -3,7 +3,7 @@ description: >-
   KUNDE Maps SDK: map view, place search, location picker, geolocation,
   routing, route preview, navigation, ETA, markers and camera control for the
   KUNDE ecosystem. Contains no Taxi, Delivery or other business logic.
-version: 0.1.0
+version: 0.2.0
 publish_to: none
 
 environment:
