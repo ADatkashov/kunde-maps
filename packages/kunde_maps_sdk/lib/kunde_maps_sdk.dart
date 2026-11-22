@@ -1,4 +1,4 @@
-/// KUNDE Maps SDK 0.1.0.
+/// KUNDE Maps SDK 0.2.0.
 ///
 /// Independent building blocks; import only what you use:
 ///
@@ -7,7 +7,7 @@
 /// * [LocationPicker] - pick a point
 /// * [Geolocation], [LocationSource] - device location
 /// * [Routing], [RoutePreviewData], [RoutePreview] - routes A -> B
-/// * [NavigationController] - guidance with voice and rerouting
+/// * [NavigationController], [NavigationView] - guidance with voice and rerouting
 /// * [Eta] - arrival estimate
 /// * [MapMarker], [MapMarkers] - markers and objects
 /// * [CameraController] - camera control
@@ -29,6 +29,7 @@ export 'src/map_view.dart';
 export 'src/markers.dart';
 export 'src/models.dart';
 export 'src/navigation.dart';
+export 'src/navigation_view.dart';
 export 'src/place_search_field.dart';
 export 'src/progress.dart';
 export 'src/route_preview.dart';

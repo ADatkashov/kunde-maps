@@ -1,6 +1,6 @@
 # kunde_maps_sdk
 
-Reusable KUNDE Maps building blocks for Flutter. Version 0.1.0. Contains **no** Taxi, Delivery, Food or payment logic: it shows maps, finds
+Reusable KUNDE Maps building blocks for Flutter. Version 0.2.0. Contains **no** Taxi, Delivery, Food or payment logic: it shows maps, finds
 places, plans routes and guides a user along one. Decisions: [ADR 0007](../../docs/architecture/decisions/0007-kunde-maps-sdk-and-ecosystem-integration.md).
 
 ## Use
@@ -11,7 +11,7 @@ dependencies:
     git:
       url: https://github.com/ADatkashov/kunde-maps.git
       path: packages/kunde_maps_sdk
-      ref: sdk-v0.1.0
+      ref: sdk-v0.2.0
 ```
 
 ```dart
@@ -27,7 +27,7 @@ final preview = await Routing(client).preview(pickup, destination); // distance,
 | Pick a point | `LocationPicker` |
 | Device location | `Geolocation`, `LocationSource` |
 | Routes, preview, ETA | `Routing`, `RoutePreviewData`, `RoutePreview`, `Eta` |
-| Guidance | `NavigationController` (voice, reroute, arrival) |
+| Guidance | `NavigationController` (voice, reroute, arrival), `NavigationView` (map + follow camera + `NavigationHud`) |
 | Markers, camera | `MapMarker`, `MapMarkers`, `CameraController` |
 
 Every piece is independent: the services need only a `MapsClient`; widgets take services as arguments; `NavigationController` takes a
