@@ -56,7 +56,8 @@ async function openPage(browser, {viewport = {width: 1280, height: 800}, search 
   page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
   const requests = [];
   const placeRequests = [];
-  await page.route('https://unpkg.com/**', route => {
+  // Libraries are vendored under /vendor/ (same origin, strict CSP); the real files are replaced by deterministic mocks.
+  await page.route('**/vendor/**', route => {
     const url = route.request().url();
     if (url.endsWith('.css')) return route.fulfill({status: 200, contentType: 'text/css', body: ''});
     if (url.includes('maplibre-gl.js')) return route.fulfill({status: 200, contentType: 'application/javascript', body: MOCK_MAPLIBRE});

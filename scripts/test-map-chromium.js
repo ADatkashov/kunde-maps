@@ -7,9 +7,8 @@ const assert = require('node:assert/strict');
     const page = await browser.newPage();
     const errors = [];
     page.on('pageerror', err => errors.push(err.message));
-    // Mock only external library downloads: this smoke tests our own HTML/JS
-    // and server behavior without depending on public CDN availability.
-    await page.route('https://unpkg.com/**', async route => {
+    // Mock only the vendored libraries: this smoke tests our own HTML/JS and server behavior.
+    await page.route('**/vendor/**', async route => {
       const url = route.request().url();
       if (url.endsWith('.css')) {
         await route.fulfill({status: 200, contentType: 'text/css', body: ''});

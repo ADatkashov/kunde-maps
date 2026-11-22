@@ -9,7 +9,7 @@ Verified in this session by executed checks:
   390x844 and 360x740 (touch): search -> select -> fly-to -> marker -> card worked, 0 console errors.
 
 Known limits
-- Search API has per-IP rate limits but no API keys/tokens yet. CSP header and SRI/vendoring of unpkg libraries not done.
+- Search API has per-IP rate limits but no API keys/tokens yet. (CSP and vendoring are done, see ADR 0003).
 - Render Free: cold start (~30-60 s) and ~155 MB index re-download per new instance.
 - No categories/POI filters, routing, navigation, favorites, mobile apps yet.
 - Map style v2 has no POI icons/sprites, no own glyph host, no terrain shading.
@@ -30,3 +30,4 @@ Phase 2 (this update)
   share links by OSM id. 36 browser scenarios, 29 web unit tests, 68 Search API tests. See `docs/places-api.md`, ADR 0002.
 - Known limits: directions are an external OSM link; POIs are colored dots (no icon sprite); contact data is as complete as OSM (mostly absent);
   places need zoom >= 11; no photos/reviews/ratings (no licensed source); saved places do not sync across devices.
+- Web hardening (ADR 0003): MapLibre/PMTiles vendored and checksummed, no inline scripts, strict CSP + security headers generated from the configured origins; verified on the real map with 0 violations. Remaining third-party host: public glyph server.

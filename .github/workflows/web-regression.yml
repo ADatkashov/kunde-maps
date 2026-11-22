@@ -5,6 +5,7 @@ on:
       - 'apps/web/**'
       - 'infrastructure/maps/**'
       - 'scripts/build-style.py'
+      - 'scripts/ci/check-vendor.py'
       - 'scripts/test-style.py'
       - 'scripts/validate-style.mjs'
       - 'scripts/fixtures/**'
@@ -14,6 +15,7 @@ on:
       - 'apps/web/**'
       - 'infrastructure/maps/**'
       - 'scripts/build-style.py'
+      - 'scripts/ci/check-vendor.py'
       - 'scripts/test-style.py'
       - 'scripts/validate-style.mjs'
       - 'scripts/fixtures/**'
@@ -29,6 +31,8 @@ jobs:
         run: |
           node --check apps/web/map.js
           node --check apps/web/core.js
+      - name: Vendored libraries are pinned, licensed and the page has no third-party or inline code
+        run: python3 scripts/ci/check-vendor.py
       - name: Unit-test web core (search client, i18n, hash links)
         run: node --test apps/web/test/*.test.js
       - name: Map styles are generated, consistent with the tile schema, and spec-valid
@@ -62,7 +66,7 @@ jobs:
           set -eu
           sudo mkdir -p /srv/kunde-web
           sudo chown "$(id -u):$(id -g)" /srv/kunde-web
-          MAPS_TILE_URL=https://example.com/kazakhstan.pmtiles sh infrastructure/maps/40-configure-tiles.sh
+          CSP_FILE=/tmp/security-headers.inc MAPS_TILE_URL=https://example.com/kazakhstan.pmtiles sh infrastructure/maps/40-configure-tiles.sh
           python3 - <<'PY'
           import json
           with open('/srv/kunde-web/config.json') as f:
@@ -72,7 +76,7 @@ jobs:
           assert 'searchUrl' not in data
           print('Runtime config OK')
           PY
-          MAPS_SEARCH_URL=https://search.example.com/ MAPS_TILE_URL=https://example.com/kazakhstan.pmtiles sh infrastructure/maps/40-configure-tiles.sh
+          MAPS_SEARCH_URL=https://search.example.com/ CSP_FILE=/tmp/security-headers.inc MAPS_TILE_URL=https://example.com/kazakhstan.pmtiles sh infrastructure/maps/40-configure-tiles.sh
           python3 - <<'PY'
           import json
           data=json.load(open('/srv/kunde-web/config.json'))
@@ -81,6 +85,17 @@ jobs:
           print('Runtime config with search URL OK')
           PY
           for bad in 'http://search.example.com' 'https://x.example.com/path"x' 'https://x.example.com/a?b=1' 'javascript:alert(1)'; do
-            if MAPS_SEARCH_URL="$bad" sh infrastructure/maps/40-configure-tiles.sh 2>/dev/null; then echo "accepted bad URL: $bad"; exit 1; fi
+            if CSP_FILE=/tmp/security-headers.inc MAPS_SEARCH_URL="$bad" sh infrastructure/maps/40-configure-tiles.sh 2>/dev/null; then echo "accepted bad URL: $bad"; exit 1; fi
           done
           echo "Rejected invalid MAPS_SEARCH_URL values"
+          CSP_FILE=/tmp/security-headers.inc MAPS_SEARCH_URL=https://search.example.com MAPS_TILE_URL=https://tiles.example.com/k.pmtiles sh infrastructure/maps/40-configure-tiles.sh
+          python3 - <<'PY'
+          text = open('/tmp/security-headers.inc').read()
+          csp = next(l for l in text.splitlines() if 'Content-Security-Policy' in l)
+          assert "script-src 'self';" in csp and 'unsafe-inline' not in csp and 'unsafe-eval' not in csp, csp
+          assert "connect-src 'self' https://fonts.openmaptiles.org https://tiles.example.com https://search.example.com;" in csp, csp
+          assert "default-src 'none'" in csp and "frame-ancestors 'none'" in csp and "object-src 'none'" in csp, csp
+          for header in ('X-Content-Type-Options', 'Referrer-Policy', 'Permissions-Policy', 'X-Frame-Options', 'Strict-Transport-Security'):
+              assert header in text, header
+          print('Security headers OK')
+          PY

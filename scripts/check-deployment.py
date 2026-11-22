@@ -25,10 +25,19 @@ def check(origin):
         raise ValueError("Expected HTTP(S) URL")
     if parsed.scheme != "https" and parsed.hostname not in ("localhost", "127.0.0.1"):
         raise ValueError("Remote deployment must use HTTPS")
-    for path in ("", "config.json", "style.json", "style-dark.json"):
+    for path in ("", "config.json", "style.json", "style-dark.json", "vendor/maplibre-gl.js", "vendor/pmtiles.js"):
         status, headers, data = get(urllib.parse.urljoin(origin, path))
         if status != 200:
             raise ValueError(f"/{path}: expected 200, got {status}")
+        if path == "":
+            lowered = {k.lower(): v for k, v in headers.items()}
+            csp = lowered.get("content-security-policy", "")
+            script_src = next((d for d in csp.split(";") if d.strip().startswith("script-src")), "")
+            if "script-src 'self'" not in script_src or "unsafe-inline" in script_src or "unsafe-eval" in script_src:
+                raise ValueError("The page must be served with a strict Content-Security-Policy (script-src 'self')")
+            for header in ("x-content-type-options", "referrer-policy", "permissions-policy"):
+                if header not in lowered:
+                    raise ValueError(f"Missing security header: {header}")
         if path.startswith("style") and "no-cache" not in {k.lower(): v for k, v in headers.items()}.get("cache-control", ""):
             raise ValueError(f"/{path}: styles must be served with Cache-Control: no-cache so releases take effect")
         if path == "style-dark.json" and json.loads(data).get("version") != 8:
