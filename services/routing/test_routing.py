@@ -54,6 +54,10 @@ class Stub(BaseHTTPRequestHandler):
             status, payload = 500, {"error": "boom"}
         elif Stub.mode == "garbage":
             payload = {"trip": {}}
+        if Stub.mode == "ok" and body.get("alternates"):
+            alt = json.loads(json.dumps(STUB_RESPONSE))
+            alt["trip"]["summary"] = {"length": 4.2, "time": 400.0}
+            payload = {**STUB_RESPONSE, "alternates": [alt][: body["alternates"]]}
         data = json.dumps(payload).encode()
         self.send_response(status); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(data)))
         self.end_headers(); self.wfile.write(data)
@@ -106,6 +110,53 @@ class RoutingApiTest(unittest.TestCase):
         self.assertIn("OpenStreetMap", body["attribution"])
         self.assertEqual(body["instruction_language"], "en")
         self.assertEqual(headers["Cache-Control"], "no-store")
+
+    def post(self, body, headers=None):
+        raw = body if isinstance(body, bytes) else json.dumps(body).encode()
+        request = Request(self.base + "/v1/routes", raw, {"Content-Type": "application/json", **(headers or {})}, method="POST")
+        try:
+            with urlopen(request) as response:
+                return response.status, json.load(response)
+        except HTTPError as err:
+            return err.code, json.load(err)
+
+    def test_alternatives_and_data_version(self):
+        status, body, _ = self.get(self.GOOD + "&alternatives=1")
+        self.assertEqual(status, 200)
+        self.assertEqual(Stub.last_request["alternates"], 2)
+        self.assertEqual([a["distance_m"] for a in body["alternatives"]], [4200])
+        self.assertEqual(body["alternatives"][0]["geometry"]["type"], "LineString")
+        self.assertEqual(body["start"], [76.9456, 43.238])
+        self.assertIn("data_version", body)
+        _, plain, _ = self.get(self.GOOD)
+        self.assertEqual(plain["alternatives"], [])
+        self.assertNotIn("alternates", Stub.last_request)
+
+    def test_post_routes_uses_the_documented_vocabulary(self):
+        status, body = self.post({"origin": {"lat": 43.2389, "lon": 76.8897}, "destination": {"lat": 43.2567, "lon": 76.9286},
+                                  "mode": "walking", "alternatives": True, "language": "en"})
+        self.assertEqual((status, body["mode"], len(body["alternatives"])), (200, "foot", 1))
+        self.assertEqual(Stub.last_request["costing"], "pedestrian")
+        bad = [({"origin": {"lat": 43.2, "lon": 76.9}, "destination": {"lat": 43.25, "lon": 76.9}, "mode": "flying"}, "mode_must_be_driving_walking_or_cycling"),
+               ({"origin": {"lat": True, "lon": 76.9}, "destination": {"lat": 43.25, "lon": 76.9}}, "from_must_be_lat,lon"),
+               ({"origin": {"lat": 43.2, "lon": 76.9}}, "to_must_be_lat,lon"),
+               ({"origin": {"lat": 48.85, "lon": 2.35}, "destination": {"lat": 43.25, "lon": 76.9}}, "outside_coverage"),
+               (b"not json", "invalid_json"), (b"[1,2]", "invalid_json")]
+        for payload, code in bad:
+            status, body = self.post(payload)
+            self.assertEqual((status, body["error"]), (400, code), payload)
+        status, _ = self.post(b"x" * 5000)
+        self.assertEqual(status, 413)
+        request = Request(self.base + "/v1/nothing", b"{}", method="POST")
+        with self.assertRaises(HTTPError) as missing:
+            urlopen(request)
+        self.assertEqual(missing.exception.code, 404)
+
+    def test_post_shares_quota_and_keys(self):
+        server.LIMITER = TokenBuckets(60, 1)
+        good = {"origin": {"lat": 43.238, "lon": 76.9456}, "destination": {"lat": 43.261, "lon": 76.9567}}
+        self.assertEqual([self.post(good)[0] for _ in range(2)], [200, 429])
+        self.assertEqual(self.post(good, {"X-API-Key": "kmk_wrong"})[0], 401)
 
     def test_kazakh_falls_back_to_russian_narrative_and_says_so(self):
         status, body, _ = self.get(self.GOOD + "&lang=kk")

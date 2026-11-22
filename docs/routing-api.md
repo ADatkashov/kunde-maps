@@ -3,11 +3,16 @@
 `GET /v1/route?from=<lat>,<lon>&to=<lat>,<lon>&mode=car|foot|bike&lang=ru|kk|en` - routes inside Kazakhstan on OpenStreetMap data (Valhalla).
 Engine choice and measurements: `docs/routing-evaluation.md`. Code: `services/routing/` (front), `infrastructure/routing/Dockerfile`.
 
+## Endpoints
+- `GET /v1/route?from=&to=&mode=car|foot|bike&lang=&alternatives=1` (used by the web app; CORS allowlist).
+- `POST /v1/routes` (server-to-server, JSON <= 2 KB): `{"origin":{"lat","lon"},"destination":{"lat","lon"},"mode":"driving|walking|cycling","alternatives":true,"language":"ru"}`;
+  same limits, API keys and reply. POST is not CORS-enabled for browsers.
+
 ## Reply (200)
 `mode`, `distance_m`, `duration_s`, `geometry` (GeoJSON LineString `[lon,lat]`, simplified to ~4 m: a 20 km route is ~100 points), `bbox`,
 `steps[]` (`instruction`, `street`, `type` = Valhalla maneuver type, `distance_m`, `duration_s`, `location`), `instruction_language`
 (Kazakh requests are narrated in Russian: Valhalla has no Kazakh text, and the reply says so), `note` (**typical time from OSM speeds, no traffic,
-closures or live conditions** - never present it as an ETA), `attribution` (`© OpenStreetMap contributors (ODbL)`), `engine`.
+closures or live conditions** - never present it as an ETA), `attribution` (`© OpenStreetMap contributors (ODbL)`), `engine`, `start`/`end` (snapped coordinates), `alternatives[]` (up to 2 more routes of the same shape, empty unless requested), `data_version` (`MAPS_ROUTING_DATA_VERSION`, set by the deployer to the graph build id).
 
 ## Errors (JSON `{error}`)
 400 `from_must_be_lat,lon` / `to_must_be_lat,lon` / `*_out_of_range` / `outside_coverage` (Kazakhstan bbox only) / `mode_must_be_car_foot_or_bike` /

@@ -244,3 +244,20 @@ li.fav .row.grow { flex: 1; min-width: 0; }
 .route-steps li small { flex: none; color: var(--text-2); font-size: 12px; white-space: nowrap; }
 .route-external { margin: 4px 14px 10px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 body.picking-start .maplibregl-canvas { cursor: crosshair; }
+
+.route-input { flex: 1; min-width: 0; height: 40px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: inherit; font-size: 14px; font-weight: 600; }
+.route-input:focus { outline: 2px solid var(--focus); outline-offset: 1px; }
+.route-point .icon-button { flex: none; width: 40px; height: 40px; }
+.route-label { width: 48px; }
+.route-suggest { list-style: none; margin: -2px 14px 6px 74px; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); box-shadow: 0 8px 24px rgba(15,23,42,.14); max-height: 240px; overflow: auto; }
+.route-suggest li { padding: 10px 10px; border-radius: 8px; cursor: pointer; font-size: 14px; display: flex; flex-direction: column; gap: 1px; min-height: 44px; justify-content: center; }
+.route-suggest li small { color: var(--text-2); font-size: 12px; }
+.route-suggest li:hover, .route-suggest li[aria-selected="true"] { background: var(--surface-hover); }
+.route-options { list-style: none; margin: 0; padding: 2px 14px 4px; display: flex; flex-direction: column; gap: 6px; }
+.route-options li { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 52px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; }
+.route-options li[aria-selected="true"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--surface)); }
+.route-options li strong { font-size: 16px; }
+.route-options li small { color: var(--text-2); font-size: 12px; display: block; }
+.route-pin { width: 28px; height: 28px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: grid; place-items: center; background: var(--primary); color: #fff; border: 2px solid #fff; box-shadow: 0 2px 8px rgba(15,23,42,.35); }
+.route-pin span { transform: rotate(45deg); font-weight: 800; font-size: 13px; }
+.route-pin.b { background: #0f172a; }
