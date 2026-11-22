@@ -17,23 +17,8 @@ jobs:
       - name: Download Kazakhstan OSM extract and checksum
         run: |
           set -euo pipefail
-          mkdir -p /tmp/kunde-osm
-          base=https://download.geofabrik.de/asia
-          fetch() {  # fetch URL OUTPUT : diagnosable and retried on any transient error
-            curl --fail --location --silent --show-error --retry 5 --retry-all-errors --retry-delay 15 \
-              --write-out '%{http_code} %{size_download} bytes <- %{url_effective}\n' --output "$2" "$1"
-          }
-          echo "Redirect chain for the extract:"
-          curl --silent --head --location --write-out 'final: %{http_code} %{url_effective}\n' --output /dev/null "$base/kazakhstan-latest.osm.pbf" || true
-          fetch "$base/kazakhstan-latest.osm.pbf" /tmp/kunde-osm/kazakhstan.osm.pbf
-          fetch "$base/kazakhstan-latest.osm.pbf.md5" /tmp/kunde-osm/kazakhstan.osm.pbf.md5
+          sh scripts/ci/fetch-osm-extract.sh /tmp/kunde-osm
           cd /tmp/kunde-osm
-          size="$(stat -c '%s' kazakhstan.osm.pbf)"
-          test "$size" -gt 50000000 || { echo "Extract is only $size bytes (not a PBF):"; head -c 400 kazakhstan.osm.pbf; exit 1; }
-          # Geofabrik checksum may use its upstream filename.
-          expected="$(awk '{print $1}' kazakhstan.osm.pbf.md5)"
-          actual="$(md5sum kazakhstan.osm.pbf | awk '{print $1}')"
-          test "$expected" = "$actual"
           sha256sum kazakhstan.osm.pbf > source.sha256
       - name: Extract and index search points
         run: |
@@ -44,7 +29,7 @@ jobs:
           # Quality gate: real Kazakhstan places must be found first (RU/KK/EN/translit). Blocks publishing bad indexes.
           python scripts/search-relevance.py --db /tmp/kunde-osm/kazakhstan-search.sqlite3 --min-top1 0.9
           sha256sum /tmp/kunde-osm/kazakhstan-search.sqlite3 > /tmp/kunde-osm/index.sha256
-          printf 'Source: Geofabrik Kazakhstan OSM extract (ODbL)\n' > /tmp/kunde-osm/PROVENANCE.txt
+          printf 'Source: Geofabrik Kazakhstan OSM extract (ODbL)\nSource URL: %s\nIndex schema: 2\n' "$(cat /tmp/kunde-osm/SOURCE_URL)" > /tmp/kunde-osm/PROVENANCE.txt
           date -u '+Built UTC: %Y-%m-%dT%H:%M:%SZ' >> /tmp/kunde-osm/PROVENANCE.txt
           cat /tmp/kunde-osm/source.sha256 >> /tmp/kunde-osm/PROVENANCE.txt
       - uses: actions/upload-artifact@v4
