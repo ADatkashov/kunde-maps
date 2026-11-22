@@ -53,6 +53,7 @@ class SearchHTTPTest(unittest.TestCase):
                 with urlopen(request) as response:
                     self.assertEqual(response.headers["Access-Control-Allow-Origin"],
                                      "https://kunde-maps-web-dev.onrender.com")
+                    self.assertEqual(response.headers["Access-Control-Expose-Headers"], "Retry-After")
                 request = Request(base + "/v1/search?q=%D0%90%D0%B1%D0%B0%D1%8F", headers={"Origin": "https://evil.example"})
                 with urlopen(request) as response:
                     self.assertIsNone(response.headers["Access-Control-Allow-Origin"])

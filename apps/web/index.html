@@ -2,29 +2,67 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#ffffff">
+<meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)">
 <title>KUNDE Maps — Алматы</title>
 <link href="https://unpkg.com/maplibre-gl@5.9.0/dist/maplibre-gl.css" rel="stylesheet">
 <link href="./ui.css" rel="stylesheet">
+<script>/* Apply the saved theme before first paint to avoid a flash. */
+try { var t = localStorage.getItem('kunde-theme'); if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t; } catch (_) {}</script>
 </head>
 <body>
 <main id="map" aria-label="Интерактивная карта Алматы"></main>
-<div class="top-panel">
-  <div class="brand"><span class="brand-mark">K</span><div><strong>KUNDE <span>Maps</span></strong><small>Алматы · Казахстан</small></div></div>
-  <div class="top-actions"><button id="language" class="location-button lang-button" type="button" aria-label="Переключить язык подписей">ҚАЗ</button><button id="locate" class="location-button" type="button" aria-label="Показать моё местоположение" title="Моё местоположение">◎</button></div>
+
+<div class="rail">
+  <div class="brand"><span class="brand-mark" aria-hidden="true">K</span><strong>KUNDE <span>Maps</span></strong></div>
+  <form id="map-search" class="searchbox" role="search" autocomplete="off">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+    <label for="search-query" class="sr-only" id="search-label">Поиск на карте</label>
+    <input id="search-query" type="search" name="q" maxlength="100" placeholder="Поиск места или адреса"
+           role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="search-results"
+           enterkeyhint="search" autocapitalize="off" spellcheck="false">
+    <button id="search-clear" class="icon-button plain" type="button" aria-label="Очистить" hidden>
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </form>
+  <section id="sheet" class="sheet" aria-label="Результаты" hidden>
+    <button id="sheet-handle" class="sheet-handle" type="button" aria-expanded="true" aria-label="Развернуть или свернуть панель"><span></span></button>
+    <div id="search-state" class="state" role="status" aria-live="polite" hidden></div>
+    <ul id="search-results" class="results" role="listbox" aria-label="Результаты" hidden></ul>
+    <article id="selection" class="place-card" hidden>
+      <div class="place-head">
+        <div class="place-title"><h2 id="selection-title">Выбранная точка</h2><p id="selection-kind" class="place-kind"></p></div>
+        <button id="selection-close" class="icon-button plain" type="button" aria-label="Закрыть">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <p class="place-coords"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.3"/></svg><span id="selection-coords"></span></p>
+      <div class="place-actions">
+        <button id="share-place" class="btn primary" type="button">Поделиться</button>
+        <button id="copy-place" class="btn" type="button">Копировать координаты</button>
+      </div>
+    </article>
+  </section>
 </div>
-<form id="map-search" class="search-panel" role="search">
-  <label for="search-query">Поиск на карте</label>
-  <div class="search-row"><input id="search-query" type="search" placeholder="Улица или район на карте" minlength="2" maxlength="100" autocomplete="off" required><button type="submit">Найти</button></div>
-  <div id="search-results" class="search-results" aria-live="polite" hidden></div>
-</form>
-<div class="bottom-panel">
-  <div id="selection" class="selection" hidden><strong id="selection-title">Выбранная точка</strong><span id="selection-coords"></span><button id="selection-close" type="button" aria-label="Закрыть карточку">✕</button></div>
-  <div id="status" role="status" aria-live="polite">Загрузка карты…</div>
+
+<div class="controls" role="group" aria-label="Управление картой">
+  <button id="language" class="icon-button" type="button" aria-label="Язык подписей" title="Язык подписей">RU</button>
+  <button id="theme" class="icon-button" type="button" aria-label="Сменить тему" title="Сменить тему">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
+  </button>
+  <button id="locate" class="icon-button" type="button" aria-label="Моё местоположение" title="Моё местоположение">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="7.5"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>
+  </button>
+</div>
+
+<div class="map-meta">
   <div id="coords" aria-label="Координаты центра карты"></div>
-  <button id="copy-coords" type="button" aria-label="Скопировать координаты центра карты">Скопировать координаты</button>
+  <button id="copy-coords" type="button" aria-label="Скопировать координаты центра карты">Копировать</button>
 </div>
+<div id="status" role="status" aria-live="polite">Загрузка карты…</div>
+
 <script src="https://unpkg.com/maplibre-gl@5.9.0/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
+<script src="./core.js"></script>
 <script src="./map.js"></script>
 </body></html>

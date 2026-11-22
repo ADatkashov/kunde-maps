@@ -19,7 +19,7 @@ jobs:
           docker run --rm --network host \
             -v "$PWD:/work" -w /work \
             mcr.microsoft.com/playwright:v1.58.2-noble \
-            bash -lc 'npm install --no-save --no-package-lock playwright@1.58.2 && node scripts/test-map-chromium.js'
+            bash -lc 'npm install --no-save --no-package-lock playwright@1.58.2 && node scripts/test-map-chromium.js && node scripts/test-search-ui.js'
       - name: Container logs
         if: always()
         run: docker logs kunde-maps-browser || true

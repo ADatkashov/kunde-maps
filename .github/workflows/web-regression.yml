@@ -18,7 +18,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate JavaScript syntax
-        run: node --check apps/web/map.js
+        run: |
+          node --check apps/web/map.js
+          node --check apps/web/core.js
+      - name: Unit-test web core (search client, i18n, hash links)
+        run: node --test apps/web/test/*.test.js
       - name: Validate map style and HTML references
         run: |
           python3 - <<'PY'
@@ -28,7 +32,7 @@ jobs:
           assert style.get('version') == 8
           assert 'kunde' in style.get('sources', {})
           html = Path('apps/web/index.html').read_text()
-          assert 'map.js' in html and 'ui.css' in html
+          assert 'map.js' in html and 'core.js' in html and 'ui.css' in html
           assert 'map-search' in html and 'search-results' in html
           print('Map static checks OK')
           PY
@@ -50,3 +54,15 @@ jobs:
           assert 'searchUrl' not in data
           print('Runtime config OK')
           PY
+          MAPS_SEARCH_URL=https://search.example.com/ MAPS_TILE_URL=https://example.com/kazakhstan.pmtiles sh infrastructure/maps/40-configure-tiles.sh
+          python3 - <<'PY'
+          import json
+          data=json.load(open('/srv/kunde-web/config.json'))
+          assert data['searchUrl'] == 'https://search.example.com', data
+          assert data['tileUrl'] == 'https://example.com/kazakhstan.pmtiles'
+          print('Runtime config with search URL OK')
+          PY
+          for bad in 'http://search.example.com' 'https://x.example.com/path"x' 'https://x.example.com/a?b=1' 'javascript:alert(1)'; do
+            if MAPS_SEARCH_URL="$bad" sh infrastructure/maps/40-configure-tiles.sh 2>/dev/null; then echo "accepted bad URL: $bad"; exit 1; fi
+          done
+          echo "Rejected invalid MAPS_SEARCH_URL values"
