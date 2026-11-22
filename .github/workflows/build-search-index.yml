@@ -28,6 +28,8 @@ jobs:
           python -m unittest discover -s services/search -p 'test_*.py' -v
           # Quality gate: real Kazakhstan places must be found first (RU/KK/EN/translit). Blocks publishing bad indexes.
           python scripts/search-relevance.py --db /tmp/kunde-osm/kazakhstan-search.sqlite3 --min-top1 0.9
+          # Places gate: every category populated, Almaty has real places (prints category counts and contact-data coverage).
+          python scripts/check-places-index.py /tmp/kunde-osm/kazakhstan-search.sqlite3
           sha256sum /tmp/kunde-osm/kazakhstan-search.sqlite3 > /tmp/kunde-osm/index.sha256
           printf 'Source: Geofabrik Kazakhstan OSM extract (ODbL)\nSource URL: %s\nIndex schema: 2\n' "$(cat /tmp/kunde-osm/SOURCE_URL)" > /tmp/kunde-osm/PROVENANCE.txt
           date -u '+Built UTC: %Y-%m-%dT%H:%M:%SZ' >> /tmp/kunde-osm/PROVENANCE.txt
