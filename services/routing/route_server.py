@@ -100,7 +100,7 @@ def valhalla_request(payload):
 
 def route(origin, destination, mode, lang):
     payload = {"locations": [{"lat": origin[0], "lon": origin[1]}, {"lat": destination[0], "lon": destination[1]}],
-               "costing": MODES[mode], "units": "kilometers", "language": LANGUAGES[lang], "directions_type": "maneuvers"}
+               "costing": MODES[mode], "units": "kilometers", "language": LANGUAGES[lang], "directions_type": "instructions"}
     data = valhalla_request(payload)
     try:
         trip = data["trip"]

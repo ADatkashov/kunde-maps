@@ -94,6 +94,7 @@ class RoutingApiTest(unittest.TestCase):
         self.assertEqual((body["mode"], body["distance_m"], body["duration_s"]), ("bike", 3510, 312))
         self.assertEqual(Stub.last_request["costing"], "bicycle")
         self.assertEqual(Stub.last_request["language"], "en-US")
+        self.assertEqual(Stub.last_request["directions_type"], "instructions")  # "maneuvers" would return no instruction text
         coords = body["geometry"]["coordinates"]
         self.assertLess(len(coords), 12)  # 205 shape points collapsed by simplification
         self.assertEqual(coords[0], [76.9456, 43.238])
