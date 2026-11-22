@@ -6,6 +6,8 @@ const vm = require('node:vm');
 const script = fs.readFileSync('apps/web/map.js', 'utf8');
 const coreScript = fs.readFileSync('apps/web/core.js', 'utf8');
 const navScript = fs.readFileSync('apps/web/nav.js', 'utf8');
+const shellScript = fs.readFileSync('apps/web/shell.js', 'utf8');
+const iconsScript = fs.readFileSync('apps/web/icons.js', 'utf8');
 const style = JSON.parse(fs.readFileSync('apps/web/style.json', 'utf8'));
 
 async function scenario(tileStatus, contentRange) {
@@ -51,8 +53,14 @@ async function scenario(tileStatus, contentRange) {
   vm.createContext(context);
   vm.runInContext(coreScript, context); // core.js (UMD) attaches KundeCore to the sandbox global
   vm.runInContext(navScript, context);  // nav.js (UMD) attaches KundeNav
+  vm.runInContext(shellScript, context); // shell.js / icons.js (UMD): shell logic and icon set
+  vm.runInContext(iconsScript, context);
   context.window.KundeCore = context.KundeCore;
   context.window.KundeNav = context.KundeNav;
+  context.window.KundeShell = context.KundeShell;
+  context.window.KundeIcons = context.KundeIcons;
+  // shell-ui.js is pure DOM glue (covered by the Chromium tests); here every call is a no-op
+  context.window.KundeShellUI = {create: () => new Proxy({}, {get: () => () => {}})};
   vm.runInContext(script, context);
   for (let i = 0; i < 20; i++) await new Promise(resolve => setImmediate(resolve));
   return {status: status.textContent, mapCreated, resolvedTileUrl, requests};

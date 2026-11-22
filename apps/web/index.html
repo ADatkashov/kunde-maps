@@ -2,11 +2,12 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f6f8fb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d1015" media="(prefers-color-scheme: dark)">
 <title>KUNDE Maps — Алматы</title>
 <link href="./vendor/maplibre-gl.css" rel="stylesheet">
 <link href="./ui.css" rel="stylesheet">
+<link href="./shell.css" rel="stylesheet">
 <link href="./nav.css" rel="stylesheet">
 <script src="./theme-init.js"></script>
 </head>
@@ -14,11 +15,20 @@
 <main id="map" aria-label="Интерактивная карта Алматы"></main>
 
 <div class="rail">
-  <div class="brand"><span class="brand-mark" aria-hidden="true">K</span><strong>KUNDE <span>Maps</span></strong></div>
+  <header id="topbar" class="topbar">
+  <div class="brand-row">
+    <div class="brand"><svg class="brand-mark" viewBox="0 0 40 32" aria-hidden="true" focusable="false"><path class="peak-a" d="M1.5 29 14 8.5l6.5 10.2L15.8 29H1.5Z"/><path class="peak-b" d="M14.8 29 26 11.5 38.5 29H14.8Z"/><circle class="peak-dot" cx="29.5" cy="6.5" r="3.2"/></svg><strong>KUNDE <span>Maps</span></strong></div>
+    <div class="brand-actions" role="group" aria-label="Язык и тема">
+      <button id="language" class="pill-button" type="button" aria-label="Язык подписей" title="Язык подписей">RU<svg class="icon caret" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></button>
+      <button id="theme" class="icon-button" type="button" aria-label="Сменить тему" title="Сменить тему">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
+      </button>
+    </div>
+  </div>
   <form id="map-search" class="searchbox" role="search" autocomplete="off">
     <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
     <label for="search-query" class="sr-only" id="search-label">Поиск на карте</label>
-    <input id="search-query" type="search" name="q" maxlength="100" placeholder="Поиск места или адреса"
+    <input id="search-query" type="search" name="q" maxlength="100" placeholder="Поиск мест, адресов, маршрутов"
            role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="search-results"
            enterkeyhint="search" autocapitalize="off" spellcheck="false">
     <button id="search-clear" class="icon-button plain" type="button" aria-label="Очистить" hidden>
@@ -26,8 +36,50 @@
     </button>
   </form>
   <div id="chips" class="chips" role="group" aria-label="Категории мест"></div>
-  <section id="sheet" class="sheet" aria-label="Результаты" hidden>
-    <button id="sheet-handle" class="sheet-handle" type="button" aria-expanded="true" aria-label="Развернуть или свернуть панель"><span></span></button>
+  </header>
+  <section id="sheet" class="sheet" aria-label="Панель" data-snap="collapsed" data-expanded="false">
+    <button id="sheet-handle" class="sheet-handle" type="button" aria-expanded="false" aria-label="Размер панели"><span></span></button>
+    <div id="sheet-body" class="sheet-body">
+    <div id="home-panel" class="panel-block home">
+      <div id="quick-actions" class="quick-actions" role="group">
+        <button id="qa-route" class="qa primary" type="button"></button>
+        <button id="qa-drive" class="qa" type="button"></button>
+        <button id="qa-fav" class="qa" type="button"></button>
+        <button id="qa-add" class="qa" type="button" aria-haspopup="dialog"></button>
+      </div>
+      <section id="recent" class="recent" hidden>
+        <div class="panel-head"><h2 id="recent-title"></h2><button id="recent-clear" class="btn small subtle" type="button"></button></div>
+        <ul id="recent-list" class="results" aria-label=""></ul>
+      </section>
+      <section class="near-you">
+        <h2 id="near-title" class="section-title"></h2>
+        <div id="quick-cats" class="quick-cats" role="group"></div>
+      </section>
+    </div>
+    <div id="navigator-panel" class="panel-block" hidden>
+      <div class="panel-head"><h2 id="navigator-title"></h2></div>
+      <div class="empty-card">
+        <span class="empty-icon" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24"><path d="M12 3.5 19 20l-7-3.6L5 20l7-16.5Z"/></svg></span>
+        <h3 id="navigator-head"></h3>
+        <p id="navigator-hint" class="muted"></p>
+        <button id="navigator-action" class="btn primary" type="button"></button>
+      </div>
+    </div>
+    <div id="profile-panel" class="panel-block profile" hidden>
+      <div class="panel-head"><h2 id="profile-title"></h2></div>
+      <p id="profile-note" class="muted"></p>
+      <div class="setting"><h3 id="set-language-title"></h3><div id="set-language" class="segmented" role="group"></div></div>
+      <div class="setting"><h3 id="set-theme-title"></h3><div id="set-theme" class="segmented" role="group"></div></div>
+      <div class="setting"><h3 id="set-units-title"></h3><div id="set-units" class="segmented" role="group"></div></div>
+      <div class="setting"><h3 id="set-map-title"></h3>
+        <button id="set-low" class="switch" type="button" role="switch" aria-checked="false"><span class="switch-text"><strong></strong><small></small></span><span class="switch-knob" aria-hidden="true"></span></button>
+        <button id="set-history" class="switch" type="button" role="switch" aria-checked="true"><span class="switch-text"><strong></strong><small></small></span><span class="switch-knob" aria-hidden="true"></span></button>
+      </div>
+      <div class="setting"><h3 id="privacy-title"></h3><p id="privacy-body" class="muted flush"></p>
+        <button id="clear-data" class="btn danger-outline" type="button"></button></div>
+      <div class="setting"><h3 id="about-title"></h3><p id="about-body" class="muted flush"></p><p id="about-license" class="muted flush"></p>
+        <p id="about-version" class="muted flush"></p></div>
+    </div>
     <div id="search-state" class="state" role="status" aria-live="polite" hidden></div>
     <ul id="search-results" class="results" role="listbox" aria-label="Результаты" hidden></ul>
     <div id="places-panel" class="panel-block" hidden>
@@ -90,7 +142,15 @@
         <button id="copy-place" class="btn subtle" type="button"></button>
       </div>
     </article>
+    </div>
   </section>
+  <nav id="tabbar" class="tabbar" aria-label="Разделы">
+    <button class="tab" type="button" data-tab="search" aria-current="page"></button>
+    <button class="tab" type="button" data-tab="route" data-icon="route"></button>
+    <button class="tab" type="button" data-tab="navigator" data-icon="navigator"></button>
+    <button id="favorites-btn" class="tab" type="button" data-tab="favorites" data-icon="bookmark"></button>
+    <button class="tab" type="button" data-tab="profile" data-icon="user"></button>
+  </nav>
 </div>
 
 <section id="nav" class="nav" hidden aria-label="Навигация">
@@ -131,18 +191,25 @@
   </div>
 </section>
 
-<div class="controls" role="group" aria-label="Управление картой">
-  <button id="language" class="icon-button" type="button" aria-label="Язык подписей" title="Язык подписей">RU</button>
-  <button id="theme" class="icon-button" type="button" aria-label="Сменить тему" title="Сменить тему">
-    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
-  </button>
-  <button id="favorites-btn" class="icon-button" type="button" aria-label="Сохранённые" title="Сохранённые" aria-pressed="false">
-    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.8 6.8 19.6l1-5.8-4.3-4.1 5.9-.9L12 3.5Z"/></svg>
-  </button>
-  <button id="locate" class="icon-button" type="button" aria-label="Моё местоположение" title="Моё местоположение">
-    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="7.5"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>
-  </button>
+<div id="map-tools" class="map-tools" role="group" aria-label="Управление картой">
+  <button id="layers-btn" class="tool" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="layers-pop"></button>
+  <div class="tool-stack">
+    <button id="zoom-in" class="tool" type="button"></button>
+    <button id="zoom-out" class="tool" type="button"></button>
+  </div>
+  <button id="compass" class="tool" type="button" hidden></button>
+  <button id="locate" class="tool" type="button" data-state="idle" aria-label="Моё местоположение" title="Моё местоположение"></button>
 </div>
+<div id="layers-pop" class="popover" role="dialog" aria-labelledby="layers-title" hidden>
+  <h2 id="layers-title"></h2>
+  <button id="layer-3d" class="switch" type="button" role="switch" aria-checked="false"><span class="switch-text"><strong></strong><small></small></span><span class="switch-knob" aria-hidden="true"></span></button>
+  <button id="layer-low" class="switch" type="button" role="switch" aria-checked="false"><span class="switch-text"><strong></strong><small></small></span><span class="switch-knob" aria-hidden="true"></span></button>
+  <div class="switch static" aria-disabled="true"><span class="switch-text"><strong id="layer-traffic-t"></strong><small id="layer-traffic-n"></small></span></div>
+</div>
+<dialog id="dialog" class="dialog" aria-labelledby="dialog-title" aria-describedby="dialog-body">
+  <h2 id="dialog-title"></h2><p id="dialog-body"></p>
+  <div class="dialog-actions"><button id="dialog-cancel" class="btn" type="button"></button><a id="dialog-link" class="btn" hidden target="_blank" rel="noopener noreferrer"></a><button id="dialog-ok" class="btn primary" type="button"></button></div>
+</dialog>
 
 <div class="map-meta">
   <div id="coords" aria-label="Координаты центра карты"></div>
@@ -153,7 +220,10 @@
 <script src="./vendor/maplibre-gl.js"></script>
 <script src="./vendor/pmtiles.js"></script>
 <script src="./core.js"></script>
+<script src="./icons.js"></script>
+<script src="./shell.js"></script>
 <script src="./nav.js"></script>
 <script src="./nav-ui.js"></script>
+<script src="./shell-ui.js"></script>
 <script src="./map.js"></script>
 </body></html>

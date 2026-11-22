@@ -263,9 +263,16 @@
     return {icon: info.icon, text, street: step.street || '', fallback: step.instruction && narrationLang && narrationLang !== lang ? narrationLang : null};
   }
 
+  let navUnits = 'metric';
+  const setNavUnits = value => { navUnits = value === 'imperial' ? 'imperial' : 'metric'; };
   function formatNavDistance(meters, lang) {
     if (!Number.isFinite(meters) || meters < 0) return '';
     const loc = lang === 'en' ? 'en-US' : 'ru-RU';
+    if (navUnits === 'imperial') {
+      const miles = meters / 1609.344;
+      if (miles < 0.1) return Math.round(meters * 3.28084 / 10) * 10 + ' ' + ({ru: 'фт', kk: 'фут', en: 'ft'}[lang] || 'ft');
+      return (miles < 10 ? Math.round(miles * 10) / 10 : Math.round(miles)).toLocaleString(loc, {maximumFractionDigits: 1}) + ' ' + ({ru: 'ми', kk: 'миля', en: 'mi'}[lang] || 'mi');
+    }
     if (meters < 1000) {
       const rounded = meters < 100 ? Math.round(meters / 10) * 10 : Math.round(meters / 50) * 50;
       return (rounded >= 1000 ? '1' : String(rounded)) + (rounded >= 1000 ? ' ' + navT(lang, 'km') : ' ' + navT(lang, 'm'));
@@ -637,5 +644,5 @@
   }
 
   return {haversine, bearing, angleDiff, clamp, STATES, TRANSITIONS, TERMINAL, createStateMachine, createRouteIndex, projectPoint, createSession, createManager,
-    cameraTarget, splitRoute, maneuverText, TYPE_INFO, NAV_STRINGS, navT, formatNavDistance, formatNavDuration, formatClock, DEFAULTS, MODE};
+    cameraTarget, splitRoute, maneuverText, TYPE_INFO, NAV_STRINGS, navT, formatNavDistance, setNavUnits, formatNavDuration, formatClock, DEFAULTS, MODE};
 });

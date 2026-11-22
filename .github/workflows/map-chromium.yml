@@ -21,7 +21,7 @@ jobs:
           docker run --rm --network host \
             -v "$PWD:/work" -w /work \
             mcr.microsoft.com/playwright:v1.58.2-noble \
-            bash -lc 'npm install --no-save --no-package-lock playwright@1.58.2 && node scripts/test-map-chromium.js && WEB_URL=http://127.0.0.1:18081 node scripts/test-search-ui.js && WEB_URL=http://127.0.0.1:18081 node scripts/test-navigation-ui.js'
+            bash -lc 'npm install --no-save --no-package-lock playwright@1.58.2 axe-core@4.10.2 && node scripts/test-map-chromium.js && WEB_URL=http://127.0.0.1:18081 node scripts/test-search-ui.js && WEB_URL=http://127.0.0.1:18081 node scripts/test-navigation-ui.js && WEB_URL=http://127.0.0.1:18081 REQUIRE_AXE=1 node scripts/test-shell-ui.js'
       - name: Container logs
         if: always()
         run: docker logs kunde-maps-browser || true

@@ -40,3 +40,10 @@ Phase 2 (this update)
   - **DEV navigation verified with simulated GPS**: 67 Node unit tests, Chromium with emulated geolocation (11 scenarios incl. denied/weak/lost GPS, jump, background, 429, cold start, layouts 320-1920 px, a11y), search/route UI regression, and a live run against the real DEV Routing API, graph, tiles, Search API and MapLibre (full trip with real reroute and arrival; 320/390/1366/1920 px, light/dark, RU/KK/EN; no console errors, no CSP violations, no foreign hosts, OSM attribution visible).
   - **Real-world navigation validated: OPEN.** No physical-device test yet (`docs/navigation-android-test.md`). Browser background/locked-screen navigation is not possible and is not claimed.
   - Found by the live run and fixed: the bottom HUD covered the OSM attribution on phones. Known, pre-existing: MapLibre "cannot fit within canvas" warning when the route panel opens on a phone; Open Sans glyph range 8704-8959 not self-hosted.
+
+- **Phase 5.5 premium UI/UX redesign (2026-11-22)**: new design system v2 (graphite dark / light), full-screen map with a persistent 3-state bottom sheet, tab bar (Search, Directions, Navigator, Saved, Profile),
+  quick actions and "Near you" categories backed by the real Places API, chips in the requested order, new place card, route planner and navigation HUD restyled (behaviour of Phase 4-5 unchanged),
+  map tools (layers, zoom, compass, locate with permission/accuracy state), Profile with local settings (language, theme, units, low-power, search history, delete local data), optional 3D buildings
+  (only real tile heights), desktop sidebar composition. See `docs/design/design-system.md`, ADR 0005, `docs/design/traffic-architecture.md`.
+  - Honest gaps: no traffic (no verified source), no voice search, "Add a place" is an explanatory dialog, no accounts/sync, weather/ratings/photos not shown. Physical Android GPS test still **open**.
+  - Tests: 79 Node unit tests, 48 + 11 + 19 Chromium scenarios (mocked map/APIs) and a live DEV suite (real backend, simulated GPS).

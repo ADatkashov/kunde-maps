@@ -10,6 +10,8 @@ on:
       - 'scripts/validate-style.mjs'
       - 'scripts/fixtures/**'
       - 'scripts/test-navigation-*.js'
+      - 'scripts/test-shell-ui.js'
+      - 'scripts/test-redesign-live.js'
       - '.github/workflows/web-regression.yml'
   pull_request:
     paths:
@@ -21,6 +23,8 @@ on:
       - 'scripts/validate-style.mjs'
       - 'scripts/fixtures/**'
       - 'scripts/test-navigation-*.js'
+      - 'scripts/test-shell-ui.js'
+      - 'scripts/test-redesign-live.js'
       - '.github/workflows/web-regression.yml'
 permissions:
   contents: read
@@ -35,6 +39,11 @@ jobs:
           node --check apps/web/core.js
           node --check apps/web/nav.js
           node --check apps/web/nav-ui.js
+          node --check apps/web/shell.js
+          node --check apps/web/shell-ui.js
+          node --check apps/web/icons.js
+          node --check scripts/test-shell-ui.js
+          node --check scripts/test-redesign-live.js
           node --check scripts/test-navigation-ui.js
           node --check scripts/test-navigation-dev.js
       - name: Vendored libraries are pinned, licensed and the page has no third-party or inline code

@@ -2,16 +2,26 @@
 (async function () {
   const core = window.KundeCore;
   const nav = window.KundeNav;
+  const Shell = window.KundeShell;
+  const Icons = window.KundeIcons;
   const $ = id => document.getElementById(id);
   const status = $('status');
-  if (!core || !nav) { status.textContent = 'Карта не настроена: core.js или nav.js не загружен'; return; }
+  if (!core || !nav || !Shell || !Icons || !window.KundeShellUI) { status.textContent = 'Карта не настроена: core.js или nav.js не загружен'; return; }
   const root = document.documentElement;
 
   // ---- tiny helpers -------------------------------------------------------------------------
   const store = {
     get(key) { try { return localStorage.getItem(key); } catch (_) { return null; } },
     set(key, value) { try { localStorage.setItem(key, value); } catch (_) { /* private mode */ } },
+    remove(key) { try { localStorage.removeItem(key); } catch (_) { /* private mode */ } },
   };
+  // Local settings (device only): units, low-power mode, search history switch, 3D buildings.
+  let settings = Shell.parseSettings(store.get('kunde-settings'));
+  if (store.get('kunde-settings') == null && Shell.suggestLowPower(typeof navigator !== 'undefined' ? navigator : null)) settings.lowPower = true;   // weak devices start without heavy effects
+  core.setUnits(settings.units); nav.setNavUnits(settings.units);
+  if (document.body && document.body.classList) document.body.classList.toggle('low-power', settings.lowPower);
+  const persistSettings = () => store.set('kunde-settings', JSON.stringify(settings));
+  let searchHistory = settings.history ? Shell.parseHistory(store.get('kunde-history')) : [];
   let lang = core.LANGS.includes(store.get('kunde-lang')) ? store.get('kunde-lang') : 'ru';
   const tr = (key, params) => core.t(lang, key, params);
   let statusTimer = null;
@@ -80,13 +90,26 @@
     }
     // Places (Phase 3): a clustered GeoJSON source. It is injected into every style we pass to setStyle, otherwise a theme or
     // language switch would remove it. `placesData` always holds the latest results.
+    // Measured on the production tiles (Almaty, z16): every building carries render_height (1-63 m, no spike at any default). We still cannot tell a real
+    // 5 m building from a processing default, so heights up to this value stay flat footprints instead of being drawn as invented boxes.
+    const BUILDING_UNKNOWN_HEIGHT = 5;
     let placesData = {type: 'FeatureCollection', features: []};
     let routeData = {type: 'FeatureCollection', features: []};
     let navData = {type: 'FeatureCollection', features: []};   // travelled / remaining parts of the route during navigation
+    const BUILDING_HEIGHT_FILTER = ['all', ['has', 'render_height'], ['>', ['get', 'render_height'], BUILDING_UNKNOWN_HEIGHT], ['!=', ['get', 'hide_3d'], true]];
     let placesMode = null; // 'viewport' | 'nearby' | null; drives the tile-POI-dot visibility in localizedStyle
     function withPlaces(style, theme) {
       const dark = theme === 'dark';
       const stroke = dark ? '#0b1220' : '#ffffff';
+      // Optional 3D buildings (off by default, never in low-power mode): only buildings whose tile record carries a real height
+      // (OpenMapTiles render_height, derived from OSM height / building:levels) and that are taller than a few metres are extruded; everything else stays flat.
+      if (Shell.buildingsEnabled(settings)) {
+        const at = style.layers.findIndex(l => l.id === 'buildings');
+        const source = at >= 0 && style.layers[at].source;
+        if (source) style.layers.splice(at + 1, 0, {id: 'buildings-3d', type: 'fill-extrusion', source, 'source-layer': 'building', minzoom: 15, filter: BUILDING_HEIGHT_FILTER,
+          paint: {'fill-extrusion-color': dark ? '#3a4352' : '#d8d3c8', 'fill-extrusion-height': ['get', 'render_height'], 'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+            'fill-extrusion-opacity': 0.86, 'fill-extrusion-vertical-gradient': true}});
+      }
       style.sources.route = {type: 'geojson', data: routeData};
       style.layers.push(
         {id: 'route-casing', type: 'line', source: 'route', layout: {'line-cap': 'round', 'line-join': 'round'}, paint: {
@@ -161,14 +184,15 @@
       center: initialPlace ? [initialPlace.lng, initialPlace.lat] : [76.945, 43.238],
       zoom: initialPlace ? 15 : 11, attributionControl: {compact: true},
     });
-    map.addControl(new maplibregl.NavigationControl({showCompass: false}), 'top-right');
 
     // ---- theme (UI tokens via CSS; map via the generated light/dark style files) --------------------------
     function syncThemeColor() {
       document.querySelectorAll('meta[name="theme-color"]').forEach(m => {
-        m.content = currentTheme() === 'dark' ? '#0b1220' : '#f8fafc';
+        m.content = currentTheme() === 'dark' ? '#0d1015' : '#f6f8fb';
         m.removeAttribute('media');
       });
+      const dark = currentTheme() === 'dark';
+      $('theme').replaceChildren(Icons.node(dark ? 'moon' : 'sun'));
     }
     // diff:true keeps the vector source and tiles; only changed paint/layout properties are applied.
     async function applyMapStyle() {
@@ -177,25 +201,26 @@
       syncThemeColor();
     }
     const reportStyleError = error => setStatus('Ошибка карты: ' + error.message, true);
-    $('theme').addEventListener('click', () => {
-      const next = currentTheme() === 'dark' ? 'light' : 'dark';
-      root.dataset.theme = next;
-      store.set('kunde-theme', next);
+    const themeMode = () => (root.dataset && root.dataset.theme) || 'system';
+    function setThemeMode(mode) {
+      if (mode === 'system') { delete root.dataset.theme; store.remove('kunde-theme'); }
+      else { root.dataset.theme = mode; store.set('kunde-theme', mode); }
       applyMapStyle().catch(reportStyleError);
-    });
+      renderProfile();
+    }
+    $('theme').addEventListener('click', () => setThemeMode(currentTheme() === 'dark' ? 'light' : 'dark'));
     if (prefersDark.addEventListener) prefersDark.addEventListener('change', () => { if (!root.dataset.theme) applyMapStyle().catch(reportStyleError); });
 
     // ---- language ---------------------------------------------------------------------------
     const LANG_BUTTON = {ru: 'RU', kk: 'ҚАЗ', en: 'EN'};
     function applyLanguage() {
       root.lang = lang;
-      $('language').textContent = LANG_BUTTON[lang];
-      $('search-query').placeholder = tr('placeholder');
+      $('language').firstChild.textContent = LANG_BUTTON[lang];
+      $('search-query').placeholder = Shell.shellT(lang, 'searchPlaceholder');
       $('search-label').textContent = tr('searchLabel');
       $('search-clear').setAttribute('aria-label', tr('clear'));
-      $('sheet-handle').setAttribute('aria-label', tr('sheetToggle'));
       $('search-results').setAttribute('aria-label', tr('results'));
-      for (const [id, key] of [['language', 'language'], ['theme', 'theme'], ['locate', 'locate']]) {
+      for (const [id, key] of [['language', 'language'], ['theme', 'theme']]) {
         $(id).setAttribute('aria-label', tr(key));
         $(id).title = tr(key);
       }
@@ -205,48 +230,101 @@
       $('copy-place').textContent = tr('copyCoords');
       $('selection-close').setAttribute('aria-label', tr('close'));
       $('copy-coords').textContent = tr('copyCoords').split(' ')[0];
+      shellUi.labels();
     }
-    $('language').addEventListener('click', () => {
-      lang = core.LANGS[(core.LANGS.indexOf(lang) + 1) % core.LANGS.length];
-      store.set('kunde-lang', lang);
+    // Everything that shows text or distances is rebuilt here (language and unit changes).
+    function relocalize() {
       applyLanguage();
-      applyMapStyle().catch(reportStyleError);
-      buildChips(); renderFavorites();
+      buildChips(); renderFavorites(); renderRecent(); buildQuickCats(); renderLayers(); renderProfile();
       if (placesMode) renderPlacesList(placesInfo);
       if (items.length && !resultsEl.hidden) renderResults();
       if (navUi && navUi.active) navUi.setLang();
       else if (routeOpen) { renderRouteLabels(); buildRoute(); } else if (selected) showCard(selected);
+    }
+    function setLang(code) {
+      if (!core.LANGS.includes(code) || code === lang) return;
+      lang = code;
+      store.set('kunde-lang', lang);
+      applyMapStyle().catch(reportStyleError);
+      relocalize();
       setStatus(tr('langChanged'));
-    });
+    }
+    $('language').addEventListener('click', () => setLang(core.LANGS[(core.LANGS.indexOf(lang) + 1) % core.LANGS.length]));
 
     // ---- sheet / panel plumbing ---------------------------------------------------------------
     const sheet = $('sheet'), stateEl = $('search-state'), resultsEl = $('search-results');
     const input = $('search-query'), clearBtn = $('search-clear'), card = $('selection');
     const chipsEl = $('chips'), placesPanel = $('places-panel'), placesList = $('places-list'), placesStateEl = $('places-state');
     const favPanel = $('favorites-panel'), favList = $('favorites-list'), favBtn = $('favorites-btn');
-    let favOpen = false, placeItems = [];
+    const homePanel = $('home-panel'), profilePanel = $('profile-panel'), navigatorPanel = $('navigator-panel'), tabbar = $('tabbar');
+    let resumeFavorites = false;   // a card opened from the saved list returns to it when closed
+    let favOpen = false, profileOpen = false, navPanelOpen = false, navTabActive = false, placeItems = [];
     const routePanel = $('route-panel');
     let routeOpen = false;
     const activeCats = new Set();
     const isMobile = () => window.matchMedia('(max-width: 719px)').matches;
+    // --sheet-h = the bottom area covered by sheet + tab bar (map attribution, toasts and tools stay above it)
     const syncSheetHeight = () => {
-      root.style.setProperty('--sheet-h', (!sheet.hidden && isMobile() ? sheet.offsetHeight : 0) + 'px');
+      const mobile = isMobile();
+      const kbInset = parseFloat(root.style.getPropertyValue('--kb')) || 0;
+      const covered = mobile ? sheet.offsetHeight + (document.body.classList.contains('kb-open') ? 0 : tabbar.offsetHeight) + kbInset : 0;
+      root.style.setProperty('--sheet-h', covered + 'px');
+      root.style.setProperty('--topbar-b', Math.round($('topbar').getBoundingClientRect().bottom) + 'px');
     };
-    if (window.ResizeObserver) new ResizeObserver(syncSheetHeight).observe(sheet);
+    if (window.ResizeObserver) { const ro = new ResizeObserver(syncSheetHeight); ro.observe(sheet); ro.observe(tabbar); }
     window.addEventListener('resize', syncSheetHeight);
-    $('sheet-handle').addEventListener('click', () => {
-      const expanded = sheet.dataset.expanded !== 'false';
-      sheet.dataset.expanded = String(!expanded);
-      $('sheet-handle').setAttribute('aria-expanded', String(!expanded));
-      syncSheetHeight();
-    });
-    // One panel at a time: card > search results/messages > saved places > places list.
+    const tabOrder = () => routeOpen ? (navTabActive ? 'navigator' : 'route') : (!card.hidden || !resultsEl.hidden || !stateEl.hidden) ? 'search' : favOpen ? 'favorites' : profileOpen ? 'profile' : navPanelOpen ? 'navigator' : 'search';
+    const shellUi = window.KundeShellUI.create({getLang: () => lang, tr, onTab: name => openTab(name)});
+    // One panel at a time: card > search results/messages > route > saved places > profile > navigator > places list > home.
     function refreshSheetVisibility() {
+      const main = !card.hidden || !resultsEl.hidden || !stateEl.hidden;
+      const idle = !main && !routeOpen;
       routePanel.hidden = !routeOpen;
-      favPanel.hidden = !(favOpen && card.hidden && resultsEl.hidden && stateEl.hidden && !routeOpen);
-      placesPanel.hidden = !(placesMode && card.hidden && resultsEl.hidden && stateEl.hidden && !favOpen && !routeOpen);
-      sheet.hidden = stateEl.hidden && resultsEl.hidden && card.hidden && placesPanel.hidden && favPanel.hidden && !routeOpen;
+      favPanel.hidden = !(favOpen && idle);
+      profilePanel.hidden = !(profileOpen && idle && !favOpen);
+      navigatorPanel.hidden = !(navPanelOpen && idle && !favOpen && !profileOpen);
+      const other = favOpen || profileOpen || navPanelOpen;
+      placesPanel.hidden = !(placesMode && idle && !other);
+      homePanel.hidden = !(idle && !other && !placesMode);
+      sheet.hidden = false;
+      const key = !card.hidden ? 'card' : main ? 'results' : routeOpen ? 'route' : favOpen ? 'favorites' : profileOpen ? 'profile' : navPanelOpen ? 'navigator' : placesMode ? 'places' : 'home';
+      shellUi.setContent(key, key === 'home' ? 'collapsed' : 'half');
+      shellUi.setTab(tabOrder());
       syncSheetHeight();
+    }
+    // Tabs: search (map, categories) | directions (route planner) | navigator (existing navigation mode) | saved | profile (local settings).
+    function openTab(name) {
+      if (navUi && navUi.active) return;
+      const wasSearch = tabOrder() === 'search' && homePanel && !homePanel.hidden;
+      if (name !== 'route' && name !== 'navigator' && routeOpen) closeRoute(false);
+      navTabActive = false;
+      if (name === 'route') {
+        favOpen = profileOpen = navPanelOpen = false; favBtn.setAttribute('aria-pressed', 'false');
+        if (!routeOpen) { if (selected && routeClient) openRoute(); else openRouteBlank(); }
+        else refreshSheetVisibility();
+        return;
+      }
+      if (name === 'navigator') {
+        favOpen = profileOpen = false; favBtn.setAttribute('aria-pressed', 'false');
+        if (routeOpen && routes.length && routes[routeActive]) {      // a route is ready: show it, GPS starts only when the user presses Start
+          navTabActive = true; refreshSheetVisibility();
+          shellUi.apply('half');
+          const start = $('route-start'); if (start && !start.closest('[hidden]')) { start.scrollIntoView({block: 'nearest'}); start.focus(); }
+          return;
+        }
+        if (routeOpen) closeRoute(false);
+        navPanelOpen = true; renderNavigatorPanel(); refreshSheetVisibility();
+        return;
+      }
+      favOpen = name === 'favorites'; profileOpen = name === 'profile'; navPanelOpen = false;
+      favBtn.setAttribute('aria-pressed', String(favOpen));
+      if (name === 'favorites' || name === 'profile') {
+        if (!card.hidden) closeCard();
+        resultsEl.hidden = true; stateEl.hidden = true; setExpanded(false);
+        if (name === 'favorites') renderFavorites(); else renderProfile();
+      }
+      if (name === 'search' && wasSearch) { input.focus(); }
+      refreshSheetVisibility();
     }
 
     // ---- selection: marker + card -----------------------------------------------------------
@@ -263,6 +341,7 @@
     }
     function showCard(place) {
       if (routeOpen) closeRoute(false);
+      favOpen = profileOpen = navPanelOpen = false; favBtn.setAttribute('aria-pressed', 'false'); resumeFavorites = false;
       selected = place;
       const poi = place.poi || null;
       // Records keep their raw data so a language switch re-localizes an open card.
@@ -278,7 +357,6 @@
       card.hidden = false;
       resultsEl.hidden = true;
       stateEl.hidden = true;
-      sheet.dataset.expanded = 'true';
       refreshSheetVisibility();
     }
     function svg(path) {
@@ -291,6 +369,7 @@
       phone: '<path d="M6.5 4h3l1.5 4-2 1.3a11 11 0 0 0 5.7 5.7L16 13l4 1.5v3a2 2 0 0 1-2 2A14 14 0 0 1 4.5 6a2 2 0 0 1 2-2Z"/>',
       website: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.4 3.4 5.2 3.4 8.5s-1 6.1-3.4 8.5c-2.4-2.4-3.4-5.2-3.4-8.5s1-6.1 3.4-8.5Z"/>',
       brand: '<path d="M4 9.5 12 4l8 5.5V20H4V9.5ZM9 20v-6h6v6"/>',
+      distance: Icons.get('route'),
     };
     function detailRow(icon, label, contentNode) {
       const row = document.createElement('div');
@@ -318,6 +397,7 @@
       const dl = $('selection-details');
       dl.replaceChildren();
       if (poi) {
+        if (poi.distance != null && Number.isFinite(poi.distance)) dl.append(detailRow('distance', Shell.shellT(lang, 'distanceWord'), document.createTextNode(core.formatDistance(poi.distance, lang))));
         if (poi.address) dl.append(detailRow('address', tr('address'), document.createTextNode(poi.address)));
         const tel = poi.phone && core.telHref(poi.phone);
         if (poi.phone) dl.append(detailRow('phone', tr('phone'), tel ? linkNode(tel, poi.phone.split(/[;,]/)[0].trim()) : document.createTextNode(poi.phone)));
@@ -371,6 +451,7 @@
       setHash(place);
       input.value = place.title;
       clearBtn.hidden = false;
+      rememberQuery(place.title);
       setExpanded(false);
       flyToPlace(place.lon, place.lat, Math.max(core.zoomForKind(place.kind), 0));
       $('coords').textContent = core.formatCoords(place.lat, place.lon);
@@ -383,7 +464,8 @@
     }
     // On phones the bottom sheet covers the lower part of the map: keep the place visible above it.
     function flyToPlace(lon, lat, zoom) {
-      const padding = {top: 0, left: 0, right: 0, bottom: isMobile() && !sheet.hidden ? Math.min(sheet.offsetHeight, window.innerHeight * 0.62) : 0};
+      // phones: keep the place above the sheet; desktop: keep it clear of the left sidebar
+      const padding = {top: 0, left: isMobile() ? 0 : Math.min(430, window.innerWidth * 0.4), right: 0, bottom: isMobile() ? Math.min(sheet.offsetHeight, window.innerHeight * 0.62) : 0};
       map.flyTo({center: [lon, lat], zoom, padding, essential: false});
     }
     function selectPoi(poi, {fly = true} = {}) {
@@ -398,6 +480,7 @@
     }
     function closeCard() {
       card.hidden = true;
+      if (resumeFavorites) { resumeFavorites = false; favOpen = true; favBtn.setAttribute('aria-pressed', 'true'); renderFavorites(); }
       selected = null;
       highlightPlace(null);
       if (marker) marker.remove();
@@ -576,6 +659,7 @@
       scheduleSearch(false);
     });
     input.addEventListener('focus', () => {
+      if (isMobile() && !homePanel.hidden && shellUi.snap === 'collapsed') shellUi.apply('half');
       if (items.length && resultsEl.hidden && card.hidden && core.isSearchable(input.value)) { renderResults(); }
     });
     $('map-search').addEventListener('submit', event => {
@@ -626,31 +710,61 @@
       try { if (map.getLayer && map.getLayer('places-selected')) map.setFilter('places-selected', ['==', ['get', 'key'], key]); } catch (_) { /* style reloading */ }
     }
 
-    // chips
+    // chips: the main categories first, "More" reveals the rest (all are real Places API categories)
+    const MAIN_CATS = ['restaurant', 'cafe', 'shop', 'pharmacy', 'fuel', 'hotel', 'parking', 'bank'];
+    let chipsMore = false;
+    const catLabel = id => id === 'hotel' ? Shell.shellT(lang, 'qcHotel') : id === 'bank' ? Shell.shellT(lang, 'catBank') : core.categoryLabel(id, lang);
+    function makeChip(id, extra) {
+      const chip = document.createElement('button');
+      chip.type = 'button'; chip.className = 'chip' + (extra ? ' extra' : ''); chip.dataset.category = id;
+      chip.style.setProperty('--c', core.CATEGORY_COLORS[id]);
+      chip.setAttribute('aria-pressed', String(activeCats.has(id)));
+      chip.append(Icons.node(id), document.createTextNode(catLabel(id)));
+      chip.addEventListener('click', () => toggleCategory(id));
+      return chip;
+    }
     function buildChips() {
       chipsEl.replaceChildren();
       chipsEl.setAttribute('aria-label', tr('chipsLabel'));
       const near = document.createElement('button');
       near.type = 'button'; near.id = 'chip-near'; near.className = 'chip action';
-      near.append(svg('<circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="7.5"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/>'), document.createTextNode(tr('nearMe')));
+      near.append(Icons.node('locate'), document.createTextNode(tr('nearMe')));
       near.setAttribute('aria-pressed', String(placesMode === 'nearby'));
       near.addEventListener('click', nearMe);
       chipsEl.append(near);
-      for (const id of core.CATEGORIES) {
-        const chip = document.createElement('button');
-        chip.type = 'button'; chip.className = 'chip'; chip.dataset.category = id;
-        chip.style.setProperty('--c', core.CATEGORY_COLORS[id]);
-        chip.setAttribute('aria-pressed', String(activeCats.has(id)));
-        const dot = document.createElement('span'); dot.className = 'dot';
-        chip.append(dot, document.createTextNode(core.categoryLabel(id, lang)));
-        chip.addEventListener('click', () => toggleCategory(id));
-        chipsEl.append(chip);
-      }
+      for (const id of MAIN_CATS.filter(c => core.CATEGORIES.includes(c))) chipsEl.append(makeChip(id, false));
+      const rest = core.CATEGORIES.filter(c => !MAIN_CATS.includes(c));
+      for (const id of rest) { const chip = makeChip(id, true); chip.hidden = !(chipsMore || activeCats.has(id)); chipsEl.append(chip); }
+      const more = document.createElement('button');
+      more.type = 'button'; more.id = 'chip-more'; more.className = 'chip more';
+      more.setAttribute('aria-expanded', String(chipsMore));
+      more.append(Icons.node('more'), document.createTextNode(Shell.shellT(lang, chipsMore ? 'fewerCategories' : 'qcMore')));
+      more.addEventListener('click', () => { chipsMore = !chipsMore; buildChips(); if (chipsMore) { const first = chipsEl.querySelector('.chip.extra'); if (first) first.scrollIntoView({inline: 'nearest', block: 'nearest'}); } });
+      chipsEl.append(more);
     }
     function syncChips() {
-      chipsEl.querySelectorAll('.chip[data-category]').forEach(chip => chip.setAttribute('aria-pressed', String(activeCats.has(chip.dataset.category))));
+      chipsEl.querySelectorAll('.chip[data-category]').forEach(chip => {
+        chip.setAttribute('aria-pressed', String(activeCats.has(chip.dataset.category)));
+        if (chip.classList.contains('extra')) chip.hidden = !(chipsMore || activeCats.has(chip.dataset.category));
+      });
       const near = $('chip-near');
       if (near) near.setAttribute('aria-pressed', String(placesMode === 'nearby'));
+      document.querySelectorAll('#quick-cats .qcat[data-category]').forEach(b => b.setAttribute('aria-pressed', String(activeCats.has(b.dataset.category))));
+    }
+    // "Near you" tiles in the sheet: a real Places request around the device position (asked for only on this tap); without a fix, the current map view.
+    let quickMore = false;
+    function buildQuickCats() {
+      shellUi.buildQuick({colors: core.CATEGORY_COLORS, onCategory: quickCategory, onMore: () => { quickMore = !quickMore; buildQuickCats(); },
+        extras: quickMore ? core.CATEGORIES.filter(c => !['shop', 'restaurant', 'hotel', 'pharmacy', 'fuel'].includes(c)).map(id => [id, catLabel(id)]) : [], expanded: quickMore});
+      syncChips();
+    }
+    function quickCategory(id) {
+      if (activeCats.size === 1 && activeCats.has(id)) { clearPlaces(); return; }
+      activeCats.clear(); activeCats.add(id); syncChips();
+      const viewportFallback = () => { nearbyOrigin = null; loadViewport(); syncPlacesStyle(); };
+      if (nearbyOrigin) { loadNearby(); syncPlacesStyle(); return; }
+      if (!navigator.geolocation) { viewportFallback(); return; }
+      locate((lat, lon) => { nearbyOrigin = {lat, lon}; if (!placesClient) { placesMode = 'nearby'; showPlacesState('warn', tr('notConfigured')); refreshSheetVisibility(); return; } loadNearby(); syncPlacesStyle(); }, viewportFallback);
     }
     let styledForPlaces = false;
     function syncPlacesStyle() { // swap the tile POI dots in/out only when the mode actually changes
@@ -829,7 +943,6 @@
       $('favorites-title').textContent = tr('favorites');
       $('favorites-note').textContent = tr('favoritesNote');
       $('favorites-close').setAttribute('aria-label', tr('close'));
-      favBtn.setAttribute('aria-label', tr('favorites')); favBtn.title = tr('favorites');
       favList.replaceChildren();
       $('favorites-empty').textContent = tr('favoritesEmpty');
       $('favorites-empty').hidden = favorites.length > 0;
@@ -856,10 +969,11 @@
       const poi = item.id && item.category ? {...item, hours: null, phone: null, website: null, brand: null, distance: null} : null;
       if (poi) {
         selectPoi(poi);
-        if (placesClient) placesClient.details(item.id).then(full => { if (selected && selected.poi && selected.poi.id === item.id) { selected.poi = full; showCard(selected); } }).catch(() => {});
+        resumeFavorites = true;
+        if (placesClient) placesClient.details(item.id).then(full => { if (selected && selected.poi && selected.poi.id === item.id) { const keep = resumeFavorites; selected.poi = full; showCard(selected); resumeFavorites = keep; } }).catch(() => {});
       } else {
         const place = {lat: item.lat, lon: item.lon, kind: item.subtype, title: core.favoriteTitle(item, lang)};
-        placeMarker([place.lon, place.lat]); showCard(place); setHash(place);
+        placeMarker([place.lon, place.lat]); showCard(place); setHash(place); resumeFavorites = true;
         map.flyTo({center: [place.lon, place.lat], zoom: 15, essential: false});
       }
     }
@@ -869,12 +983,7 @@
       favorites = result.list; persistFavorites(); syncSaveButton(); renderFavorites();
       setStatus(result.saved ? tr('savedToast') : tr('removedToast'));
     });
-    favBtn.addEventListener('click', () => {
-      favOpen = !favOpen;
-      favBtn.setAttribute('aria-pressed', String(favOpen));
-      if (favOpen) { renderFavorites(); if (!card.hidden) closeCard(); sheet.dataset.expanded = 'true'; }
-      refreshSheetVisibility();
-    });
+    favBtn.setAttribute('aria-pressed', 'false');
     $('favorites-close').addEventListener('click', () => { favOpen = false; favBtn.setAttribute('aria-pressed', 'false'); refreshSheetVisibility(); });
 
     // ---- coordinates, geolocation ------------------------------------------------------------------
@@ -888,19 +997,24 @@
         setTimeout(() => { copy.textContent = label; }, 1500);
       }
     });
-    function locate(onFix) {
-      if (!navigator.geolocation) { setStatus(tr('geoUnsupported'), true); return; }
+    function locate(onFix, onFail) {
+      if (!navigator.geolocation) { shellUi.setLocateState('error'); setStatus(tr('geoUnsupported'), true); if (onFail) onFail(); return; }
       setStatus(tr('locating'), true);
+      shellUi.setLocateState('busy');
       // The fix moves the map. Only "Nearby" sends it (rounded to ~100 m) to the Places API; it is never logged or stored.
       navigator.geolocation.getCurrentPosition(({coords: position}) => {
         const point = [position.longitude, position.latitude];
         if (userMarker) userMarker.remove();
-        userMarker = new maplibregl.Marker({color: '#2563eb'}).setLngLat(point).addTo(map);
+        const dot = document.createElement('div'); dot.className = 'user-dot'; dot.innerHTML = '<span></span>';
+        userMarker = new maplibregl.Marker({element: dot}).setLngLat(point).addTo(map);
         map.flyTo({center: point, zoom: 15, essential: false});
+        shellUi.setLocateState('ok', position.accuracy);
         setStatus(tr('located'));
         if (onFix) onFix(position.latitude, position.longitude);
       }, error => {
+        shellUi.setLocateState(error.code === 1 ? 'denied' : 'error');
         setStatus(error.code === 1 ? tr('geoDenied') : tr('geoFailed'), true);
+        if (onFail) onFail(error);
       }, {enableHighAccuracy: true, timeout: 12000, maximumAge: 30000});
     }
     function nearMe() {
@@ -912,6 +1026,120 @@
       });
     }
     $('locate').addEventListener('click', () => locate());
+    // Permission state is read without prompting (the browser asks only when the user taps the button).
+    try {
+      if (navigator.permissions && navigator.permissions.query) navigator.permissions.query({name: 'geolocation'}).then(result => {
+        const sync = () => { if (result.state === 'denied') shellUi.setLocateState('denied'); else if ($('locate').dataset.state === 'denied') shellUi.setLocateState('idle'); };
+        sync(); result.onchange = sync;
+      }).catch(() => {});
+    } catch (_) { /* optional */ }
+    shellUi.setLocateState('idle');
+
+    // ---- map tools: zoom, compass, layers ---------------------------------------------------------------------
+    $('zoom-in').addEventListener('click', () => (typeof map.zoomIn === 'function' ? map.zoomIn() : map.easeTo({zoom: map.getZoom() + 1})));
+    $('zoom-out').addEventListener('click', () => (typeof map.zoomOut === 'function' ? map.zoomOut() : map.easeTo({zoom: map.getZoom() - 1})));
+    const compassBtn = $('compass');
+    const syncCompass = () => { const b = typeof map.getBearing === 'function' ? map.getBearing() : 0; compassBtn.hidden = Math.abs(b) < 1; };
+    map.on('rotate', syncCompass);
+    compassBtn.addEventListener('click', () => { if (typeof map.resetNorth === 'function') map.resetNorth(); else map.easeTo({bearing: 0}); });
+    function renderLayers() {
+      shellUi.setSwitch($('layer-3d'), Shell.buildingsEnabled(settings), Shell.shellT(lang, 'layer3d'), Shell.shellT(lang, 'layer3dNote'), settings.lowPower);
+      shellUi.setSwitch($('layer-low'), settings.lowPower, Shell.shellT(lang, 'layerLow'), Shell.shellT(lang, 'layerLowNote'));
+      shellUi.labels();
+    }
+    function apply3D() {
+      applyMapStyle().catch(reportStyleError);
+      const on = Shell.buildingsEnabled(settings);
+      if (typeof map.easeTo === 'function' && !(navUi && navUi.active)) map.easeTo({pitch: on ? 50 : 0, essential: false});
+    }
+    function setLowPower(on) {
+      const had3d = Shell.buildingsEnabled(settings);
+      settings.lowPower = Boolean(on);
+      document.body.classList.toggle('low-power', settings.lowPower);
+      persistSettings(); renderLayers(); renderProfile();
+      if (had3d !== Shell.buildingsEnabled(settings)) apply3D();
+    }
+    $('layer-3d').addEventListener('click', () => {
+      if (settings.lowPower) return;
+      settings.buildings3d = !settings.buildings3d; persistSettings(); renderLayers(); apply3D();
+    });
+    $('layer-low').addEventListener('click', () => setLowPower(!settings.lowPower));
+
+    // ---- recent searches (device-local, can be switched off and cleared in the profile) ------------------------------
+    function rememberQuery(text) {
+      if (!settings.history) return;
+      searchHistory = Shell.addHistory(searchHistory, text);
+      store.set('kunde-history', JSON.stringify(searchHistory));
+      renderRecent();
+    }
+    function renderRecent() {
+      const list = $('recent-list');
+      list.replaceChildren();
+      list.setAttribute('aria-label', Shell.shellT(lang, 'recent'));
+      const show = settings.history && searchHistory.length > 0;
+      $('recent').hidden = !show;
+      if (!show) return;
+      for (const q of searchHistory) {
+        const li = document.createElement('li'); li.className = 'place';
+        const row = document.createElement('button'); row.type = 'button'; row.className = 'row';
+        const pin = document.createElement('span'); pin.className = 'pin'; pin.append(Icons.node('clock'));
+        const text = document.createElement('span'); text.className = 'result-text';
+        const name = document.createElement('span'); name.className = 'result-name'; name.textContent = q;
+        text.append(name); row.append(pin, text);
+        row.addEventListener('click', () => { input.value = q; clearBtn.hidden = false; scheduleSearch(true); });
+        li.append(row); list.append(li);
+      }
+    }
+    $('recent-clear').addEventListener('click', () => { searchHistory = []; store.remove('kunde-history'); renderRecent(); setStatus(Shell.shellT(lang, 'clearDataDone')); });
+
+    // ---- profile: local settings only (no accounts exist) ---------------------------------------------------------
+    const LANG_NAMES = {ru: 'Русский', kk: 'Қазақша', en: 'English'};
+    function setUnitsPref(units) {
+      settings.units = units; persistSettings();
+      core.setUnits(units); nav.setNavUnits(units);
+      relocalize();
+    }
+    function setHistoryPref(on) {
+      settings.history = Boolean(on); persistSettings();
+      if (!on) { searchHistory = []; store.remove('kunde-history'); setStatus(Shell.shellT(lang, 'historyOff')); }
+      else searchHistory = Shell.parseHistory(store.get('kunde-history'));
+      renderRecent(); renderProfile();
+    }
+    function clearLocalData() {
+      for (const key of ['kunde-favorites', 'kunde-history', 'kunde-settings', 'kunde-theme', 'kunde-lang']) store.remove(key);
+      favorites = []; searchHistory = []; settings = Shell.parseSettings(null);
+      core.setUnits('metric'); nav.setNavUnits('metric');
+      document.body.classList.toggle('low-power', false);
+      delete root.dataset.theme; lang = 'ru';
+      applyMapStyle().catch(reportStyleError);
+      relocalize(); syncSaveButton(); apply3D();
+      setStatus(Shell.shellT(lang, 'clearDataDone'));
+    }
+    function renderProfile() {
+      shellUi.renderProfile({lang, themeMode: themeMode(), settings, langNames: LANG_NAMES,
+        handlers: {language: setLang, theme: setThemeMode, units: setUnitsPref}});
+      shellUi.setSwitch($('set-low'), settings.lowPower, Shell.shellT(lang, 'layerLow'), Shell.shellT(lang, 'layerLowNote'));
+      shellUi.setSwitch($('set-history'), settings.history, Shell.shellT(lang, 'setHistory'), Shell.shellT(lang, 'setHistoryNote'));
+    }
+    $('set-low').addEventListener('click', () => setLowPower(!settings.lowPower));
+    $('set-history').addEventListener('click', () => setHistoryPref(!settings.history));
+    $('clear-data').addEventListener('click', () => shellUi.dialog({title: Shell.shellT(lang, 'clearData'), body: Shell.shellT(lang, 'clearDataConfirm'),
+      ok: Shell.shellT(lang, 'delete'), cancel: Shell.shellT(lang, 'cancel'), danger: true, onOk: clearLocalData}));
+
+    // ---- navigator tab: entry to the existing navigation mode ---------------------------------------------------
+    function renderNavigatorPanel() {
+      $('navigator-head').textContent = Shell.shellT(lang, 'navNoRoute');
+      $('navigator-hint').textContent = Shell.shellT(lang, 'navNoRouteHint');
+      const action = $('navigator-action'); action.textContent = Shell.shellT(lang, 'navBuild');
+    }
+    $('navigator-action').addEventListener('click', () => openTab('route'));
+
+    // ---- quick actions in the sheet -----------------------------------------------------------------------------------
+    $('qa-route').addEventListener('click', () => openTab('route'));
+    $('qa-drive').addEventListener('click', () => { if (!routeClient) { setStatus(tr('notConfigured')); return; } openRouteBlank('car'); });
+    $('qa-fav').addEventListener('click', () => openTab('favorites'));
+    $('qa-add').addEventListener('click', () => shellUi.dialog({title: Shell.shellT(lang, 'addTitle'), body: Shell.shellT(lang, 'addBody'), ok: Shell.shellT(lang, 'ok'),
+      link: {label: Shell.shellT(lang, 'addOsm'), href: 'https://www.openstreetmap.org/'}}));
 
     // ---- routing (Phase 4) -------------------------------------------------------------------------------------
     // Both ends are editable (type an address/place, use the device position once, or tap the map). The device position is used for the one
@@ -961,7 +1189,10 @@
       $('route-steps-summary').textContent = tr('routeSteps');
       routeOptionsEl.setAttribute('aria-label', tr('routeAlt'));
       $('route-note').textContent = tr('routeNote');
-      for (const button of document.querySelectorAll('#route-modes .mode')) button.textContent = tr({car: 'modeCar', foot: 'modeFoot', bike: 'modeBike'}[button.dataset.mode]);
+      for (const button of document.querySelectorAll('#route-modes .mode')) {
+        const label = document.createElement('span'); label.textContent = tr({car: 'modeCar', foot: 'modeFoot', bike: 'modeBike'}[button.dataset.mode]);
+        button.replaceChildren(Icons.node({car: 'car', foot: 'walk', bike: 'bike'}[button.dataset.mode]), label);
+      }
       for (const [input, point] of [[fromInput, routeFrom], [toInput, routeDest]]) {
         if (force || document.activeElement !== input) input.value = pointLabel(point);
         input.placeholder = point ? '' : tr('routeSearchPlaceholder');
@@ -1057,10 +1288,20 @@
     function openRoute() {
       if (!selected || !routeClient) return;
       routeDest = {lat: selected.lat, lon: selected.lon, kind: 'place', title: selected.title};
-      routeFrom = null; routeOpen = true; card.hidden = true;
+      routeFrom = null; routeOpen = true; card.hidden = true; favOpen = profileOpen = navPanelOpen = false;
       setHash(selected, routeMode);
       resetRouteResult(); renderRouteLabels(); updatePins(); refreshSheetVisibility(); setExpanded(false);
       useMyLocation();
+    }
+    // The Directions tab / quick actions: an empty planner (nothing is requested and GPS stays off until the user chooses a start).
+    function openRouteBlank(mode) {
+      if (!routeClient) { setStatus(tr('notConfigured')); return; }
+      if (mode) { routeMode = mode; for (const b of document.querySelectorAll('#route-modes .mode')) b.setAttribute('aria-pressed', String(b.dataset.mode === routeMode)); }
+      routeDest = null; routeFrom = null; routeOpen = true; card.hidden = true; favOpen = profileOpen = navPanelOpen = false;
+      resultsEl.hidden = true; stateEl.hidden = true; setExpanded(false);
+      resetRouteResult(); renderRouteLabels(); updatePins(); refreshSheetVisibility();
+      showRouteState('info', Shell.shellT(lang, 'routeBlank'));
+      toInput.focus();
     }
     function setRouteStart(point) {
       setPickingStart(false);
@@ -1161,7 +1402,7 @@
     function closeRoute(restoreCard = true) {
       clearTimeout(routeRetryTimer); routeRetryTimer = null;
       if (routeAbort) routeAbort.abort();
-      routeAbort = null; routeOpen = false;
+      routeAbort = null; routeOpen = false; navTabActive = false;
       setPickingStart(false);
       resetRouteResult();
       if (restoreCard && selected) { card.hidden = false; setHash(selected); }
@@ -1199,6 +1440,9 @@
     applyLanguage();
     buildChips();
     renderFavorites();
+    renderRecent(); buildQuickCats(); renderLayers(); renderProfile(); renderNavigatorPanel();
+    refreshSheetVisibility();
+    if (settings.buildings3d && Shell.buildingsEnabled(settings)) apply3D();
     if (initialPlace) {
       const place = {lat: initialPlace.lat, lon: initialPlace.lng, kind: '', title: initialPlace.name || tr('selectedPoint')};
       placeMarker([place.lon, place.lat]);

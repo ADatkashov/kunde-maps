@@ -1,45 +1,54 @@
-# KUNDE Maps design system v1
+# KUNDE Maps design system v2 (Phase 5.5)
 
-Implemented in `apps/web/ui.css` (CSS custom properties). Own visual language; no third-party map-app assets or icons.
-Style: modern minimal, floating surfaces over a full-screen map, soft shadows, 12-16 px radii.
+Implemented in `apps/web/ui.css` (tokens + components), `apps/web/shell.css` (layout), `apps/web/nav.css` (navigation HUD), `apps/web/icons.js` (icons).
+Own visual language: dark graphite first, bright blue for actions, green for success. No third-party map-app assets, icons or code. Decisions: ADR 0005.
+Before/after screenshots: `docs/design/screenshots/` (`before-*` = Phase 5 DEV, `after-*` = this redesign on DEV).
 
-## Tokens (final, contrast-checked)
-| Token | Light | Dark |
-| --- | --- | --- |
-| `--primary` | `#2563EB` | `#5B8DEF` |
-| `--on-primary` | `#FFFFFF` | `#0B1220` |
-| `--accent` | `#0D9488` | `#2DD4BF` |
-| `--bg` / `--surface` | `#F8FAFC` / `#FFFFFF` | `#0B1220` / `#121A2B` |
-| `--text` / `--text-2` | `#0F172A` / `#556377` | `#E8EEF9` / `#9FB0C8` |
-| `--border` | `#E2E8F0` | `#26324A` |
+## Tokens (contrast-checked in `apps/web/test/contrast.test.js`, WCAG AA 4.5:1 for text, 3:1 for the focus ring)
+| Token | Light | Dark | Use |
+| --- | --- | --- | --- |
+| `--bg` / `--surface` / `--surface-2` | `#f4f6fa` / `#ffffff` / `#eef1f6` | `#0d1015` / `#161a21` / `#1e232c` | page, cards and sheet, tiles and fields |
+| `--text` / `--text-2` | `#0e1420` / `#4f5d70` | `#f1f4f9` / `#a3adbd` | primary / secondary text |
+| `--primary` + `--on-primary` | `#2563eb` + `#fff` | `#2b66f2` + `#fff` | filled buttons, maneuver banner |
+| `--primary-text` | `#2563eb` | `#7da6ff` | links, active tab, icons on surfaces (the fill colour is too dark for text on dark) |
+| `--ok` / `--ok-solid` | `#15803d` | `#4ade80` / `#34d399` | open now, success fill |
+| `--danger`, `--warn` | red / amber on tinted backgrounds | same | errors, warnings (4.5:1 pairs) |
+Radii 12 / 18 / 24, touch target 44 px (map tools 48, tabs 58+), shadows `--shadow` / `--shadow-sm`, one easing `--ease`.
+Theme: system / light / dark (Profile or the top-bar button), persisted in `localStorage` (`kunde-theme`; "system" removes the key).
 
-Measured WCAG contrast (computed, see PR): text 17.9:1 / 14.9:1; secondary text 6.1:1 / 7.9:1; on-primary 5.2:1 / 5.8:1;
-primary on surface 5.2:1 / 5.4:1; danger/warn banners 5.9-9.4:1; map labels 5.6:1 (light) / 8.2:1 (dark). All >= 4.5:1.
-The suggested secondary text `#64748B` (4.76:1) passes but was darkened to `#556377` for small text.
+## Components
+Buttons (`.btn`, `.btn.primary/.subtle/.danger/.small`), icon button, pill button (language), search field, category chips (colour icon, selected state,
+"More" reveals the rest), map tools (layers, zoom stack, compass only when rotated, locate with state dot), bottom sheet (3 snaps), place card, route
+card (A/B fields, mode segmented control, alternatives, steps, Start), navigation HUD, loading (spinner, skeleton), error/empty/warn states, dialog
+(native `<dialog>`: focus trap, Esc, focus returns), popover, switch (`role="switch"`), segmented control, toast (`#status`), tab bar.
 
-Theme: follows `prefers-color-scheme`, manual toggle persisted in `localStorage` (`kunde-theme`). The map uses two generated style files
-(`style.json`, `style-dark.json`) swapped with `map.setStyle(..., {diff: true})` (tiles and DOM markers are kept).
-
-## Typography and icons
-Font stack `Inter, "Noto Sans", system-ui, ...` (Cyrillic incl. Kazakh letters covered by Noto/system fonts). No web font is
-downloaded yet; self-hosting Inter (OFL) is a follow-up. One inline stroke icon set (24 px grid, 2 px stroke).
+## Screens
+- **Search (home)**: top bar (logo, language, theme), search field, category chips; sheet collapsed = four quick actions (Route, Drive, Saved, Add place);
+  expanded = recent searches (device-local, switchable) and "Near you" tiles (groceries, food, hotels, pharmacies, fuel, More -> all 17 real categories).
+- **Directions**: planner with A/B fields, swap, device position / tap-on-map start, car/walk/bike, alternatives, summary, collapsible steps, Start.
+- **Navigator**: with a ready route it focuses *Start*; without one it explains and offers *Build a route*. GPS only starts on *Start*.
+- **Saved**: the device-local list (no sync, said in the panel).
+- **Profile**: language, theme, units (km / miles), low-power mode, search-history switch, privacy text, delete local data (confirm dialog), about + ODbL.
+- **Place card**: category chip, title, kind, open-now badge, distance (when known), address / phone / website / brand / hours only if OSM has them,
+  Route / Save / Share, copy coordinates. No ratings, photos or prices.
+- **Navigation**: unchanged behaviour (Phase 5); while active the whole shell is hidden, banner + bottom bar remain, OSM attribution stays visible.
 
 ## Layout
-- Desktop (>= 720 px): left rail (brand, search, results or place card), controls top-right, coordinates chip bottom-left.
-- Mobile (< 720 px): search on top, results/place card in a bottom sheet (max 62 dvh, handle collapses it), safe-area aware;
-  the sheet height is exposed as `--sheet-h` so map attribution and toasts stay visible above it.
-- Touch targets 44 px, `:focus-visible` rings, `prefers-reduced-motion`, forced-colors fallback.
+- Mobile (< 720 px): map is the full screen; floating top bar; fixed tab bar; sheet snaps collapsed / half / full and never covers the top bar; map tools sit on the
+  right above the sheet (`--sheet-h`), hide under the full sheet; keyboard: tab bar hides and the sheet rides on the keyboard (`visualViewport`).
+  Landscape phones get a narrow left sheet. Safe areas via `env(safe-area-inset-*)`.
+- Desktop (>= 720 px): left sidebar 404-420 px holds search, categories, content and tabs; the map keeps the whole window (camera padding clears the sidebar).
 
-## Components and states
-Search bar (combobox/listbox ARIA, `/` focuses it), suggestions with loading skeleton, empty, error + retry, rate-limit
-countdown, "service waking up" notice (Render Free cold start), place card (share link, copy coordinates), map controls,
-toast, language switch (RU/KK/EN), theme switch. Not yet built: category chips, route planner, navigation panel, favorites,
-settings, dialogs (need real data/features first).
+## Performance and accessibility
+No new libraries, no web fonts, one icon module; all effects are CSS transitions on a few elements, none permanent. `prefers-reduced-motion` and the
+Low-power mode remove animations; Low-power also disables 3D. Roles/ARIA: tab bar `nav` with `aria-current`, arrows/Home/End; sheet handle is a button with
+`aria-expanded` and a state label; switches `role="switch"`; segmented controls `aria-pressed`; dialog is modal; combobox pattern for search unchanged.
 
 ## Quality gates
-`apps/web/test/*.test.js` (core logic), `scripts/test-search-ui.js` (17 browser scenarios incl. 320-430 px overflow and
-touch-target checks, XSS-safe rendering, races), `scripts/test-map-chromium.js` (missing-tiles smoke).
-Not yet automated: pixel-diff screenshots, axe accessibility scan, tablet/landscape matrix, large system fonts.
+`apps/web/test/*.test.js` (contrast of 20+ token pairs per theme, sheet geometry, history, settings, units, strings, no-promise wording, no third-party code),
+`scripts/test-search-ui.js` (48 Chromium scenarios, mocked map and APIs), `scripts/test-navigation-ui.js` (11, simulated GPS), `scripts/test-shell-ui.js` (19: gestures,
+tabs, categories, profile, layers, dialogs, keyboard inset, desktop, 5 phone sizes, 200 % text), `scripts/test-redesign-live.js` (real DEV: map, APIs, GPS simulated).
+Not automated: pixel-diff, axe-core audit, real-device gesture/FPS profile, iOS Safari / Samsung Internet (Chromium emulation only).
 
 ## Map style v2 (Phase 2, stage C)
 Generated by `scripts/build-style.py` (light + dark palettes, 54 layers each), committed as `apps/web/style.json` / `style-dark.json`; do not edit by hand
