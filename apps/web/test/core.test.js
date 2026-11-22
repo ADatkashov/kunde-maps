@@ -153,7 +153,7 @@ test('config URL parsing accepts https and only localhost over http', () => {
 
 test('place hash round-trips and rejects invalid input', () => {
   const h = core.buildPlaceHash(43.23639, 76.94573, 'Алматы <b>');
-  assert.deepEqual(core.parsePlaceHash(h), {lat: 43.23639, lng: 76.94573, name: 'Алматы <b>', poi: null});
+  assert.deepEqual(core.parsePlaceHash(h), {lat: 43.23639, lng: 76.94573, name: 'Алматы <b>', poi: null, route: null});
   const withPoi = core.buildPlaceHash(43.2, 76.9, 'Кафе', 'n123');
   assert.equal(core.parsePlaceHash(withPoi).poi, 'n123');
   assert.equal(core.parsePlaceHash('#lat=1&lng=2&poi=n1%27%20OR%201').poi, null, 'invalid poi ids are ignored');
@@ -396,4 +396,14 @@ test('route replies carry validated alternatives and the data version', async ()
   const urls = [];
   await routes(async (url) => { urls.push(url); return json(200, routeBody()); }).route({from: {lat: 43, lon: 76}, to: {lat: 44, lon: 77}, alternatives: true});
   assert.match(urls[0], /&alternatives=1$/);
+});
+
+test('route deep links carry the destination and mode only (never a start position)', () => {
+  const hash = core.buildPlaceHash(43.15944, 77.05757, 'Медеу', 'n4665144598', 'foot');
+  assert.equal(hash, '#lat=43.15944&lng=77.05757&name=%D0%9C%D0%B5%D0%B4%D0%B5%D1%83&poi=n4665144598&route=foot');
+  assert.deepEqual(core.parsePlaceHash(hash), {lat: 43.15944, lng: 77.05757, name: 'Медеу', poi: 'n4665144598', route: 'foot'});
+  assert.equal(core.parsePlaceHash('#lat=43&lng=76&route=plane').route, null);
+  assert.equal(core.parsePlaceHash('#lat=43&lng=76&route=car&from=43.2,76.9').route, 'car');
+  assert.equal(core.buildPlaceHash(43, 76, '', null, 'plane'), '#lat=43.00000&lng=76.00000');
+  assert.equal('from' in core.parsePlaceHash('#lat=43&lng=76&from=43.2,76.9'), false);
 });

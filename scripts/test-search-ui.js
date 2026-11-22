@@ -48,7 +48,7 @@ const MOCK_MAPLIBRE = `(function () {
 })();
 `;
 
-async function openPage(browser, {viewport = {width: 1280, height: 800}, search = true, handler, colorScheme = 'light', hash = '', mobile = false, places, geo, storage, routing} = {}) {
+async function openPage(browser, {viewport = {width: 1280, height: 800}, search = true, handler, colorScheme = 'light', hash = '', mobile = false, places, geo, storage, routing, waitLoaded = true} = {}) {
   const context = await browser.newContext({viewport, colorScheme, isMobile: mobile, hasTouch: mobile,
     ...(geo ? {permissions: ['geolocation'], geolocation: geo} : {})});
   const page = await context.newPage();
@@ -91,7 +91,7 @@ async function openPage(browser, {viewport = {width: 1280, height: 800}, search 
     await route.fulfill({status: reply.status || 200, headers: {...CORS, 'content-type': 'application/json', ...(reply.headers || {})}, body: JSON.stringify(reply.body ?? {results: reply.results ?? []})});
   });
   await page.goto(WEB + '/' + hash, {waitUntil: 'domcontentloaded'});
-  await page.locator('#status').filter({hasText: 'Карта загружена'}).waitFor({timeout: 15000});
+  if (waitLoaded) await page.locator('#status').filter({hasText: 'Карта загружена'}).waitFor({timeout: 15000});
   return {page, context, errors, requests, placeRequests, routeRequests};
 }
 
@@ -246,6 +246,23 @@ const tests = {
     await page.locator('#route-steps-wrap > summary').click();
     await page.locator('#route-steps li').first().waitFor();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, 'no horizontal scroll');
+    await context.close();
+  },
+  async 'route: a deep link opens the panel for its destination, keeps only destination and mode in the URL, and closing restores the card link'(browser) {
+    const {page, context, routeRequests} = await openPage(browser, {geo: {latitude: 43.2381, longitude: 76.9456}, routing: async () => ROUTE_REPLY,
+      hash: '#lat=43.15944&lng=77.05757&name=%D0%9C%D0%B5%D0%B4%D0%B5%D1%83&route=foot', waitLoaded: false});
+    await page.locator('#route-total').waitFor();
+    await page.waitForFunction(() => document.querySelector('#route-total').textContent.length > 3);
+    assert.equal(await page.locator('#route-to').inputValue(), 'Медеу');
+    assert.equal(await page.locator('.mode[data-mode=foot]').getAttribute('aria-pressed'), 'true');
+    assert.match(routeRequests[0], /to=43\.15944,77\.05757&mode=foot/);
+    assert.match(await page.evaluate(() => location.hash), /route=foot/);
+    assert.doesNotMatch(await page.evaluate(() => location.hash), /43\.2381|76\.9456|from/);  // the device position never reaches the URL
+    await page.locator('.mode[data-mode=bike]').click();
+    assert.match(await page.evaluate(() => location.hash), /route=bike/);
+    await page.locator('#route-close').click();
+    assert.doesNotMatch(await page.evaluate(() => location.hash), /route=/);
+    assert.equal(await page.locator('#selection').isVisible(), true);
     await context.close();
   },
   async 'route: texts follow the language and a Kazakh UI says the directions are in Russian'(browser) {
