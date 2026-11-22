@@ -9,6 +9,9 @@ on:
         default: almaty
         type: choice
         options: [almaty, kazakhstan]
+      mem_limit:
+        description: "serve-time container memory limit, e.g. 512m (empty = none)"
+        default: ""
       engines:
         description: "space separated: osrm valhalla graphhopper"
         default: "osrm valhalla graphhopper"
@@ -26,6 +29,7 @@ jobs:
       SCOPE: ${{ inputs.scope }}
       ENGINES: ${{ inputs.engines }}
       ENGINE: ${{ matrix.engine }}
+      BENCH_MEM_LIMIT: ${{ inputs.mem_limit }}
       BENCH_LONG: ${{ inputs.scope == 'kazakhstan' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4

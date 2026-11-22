@@ -31,7 +31,7 @@ timed_container() {  # timed_container LABEL DISK_PATH IMAGE ENTRYPOINT-CMD...  
 serve_and_bench() {  # serve_and_bench LABEL PROFILE PORT READY_URL IMAGE ENTRYPOINT-CMD...
   local label=$1 profile=$2 port=$3 ready=$4 image=$5; shift 5
   local name="serve-$engine-$profile"
-  docker run -d --name "$name" --network host -v "$work:/data" --entrypoint bash "$image" -lc "$*" > /dev/null
+  docker run -d --name "$name" --network host ${BENCH_MEM_LIMIT:+--memory "$BENCH_MEM_LIMIT" --memory-swap "$BENCH_MEM_LIMIT"} -v "$work:/data" --entrypoint bash "$image" -lc "$*" > /dev/null
   for _ in $(seq 1 120); do curl -fs -o /dev/null "http://127.0.0.1:$port$ready" && break; sleep 1; done
   python3 "$here/bench.py" "$engine" "http://127.0.0.1:$port" "$profile" 20 > "$out/routes-$engine-$profile.json" || true
   local mem; mem=$(docker stats --no-stream --format '{{.MemUsage}}' "$name" | awk '{print $1}')
@@ -55,10 +55,11 @@ valhalla)
   img=ghcr.io/gis-ops/docker-valhalla/valhalla:latest
   timed_container "build tiles (all profiles)" valhalla_tiles "$img" \
     "valhalla_build_config --mjolnir-tile-dir /data/valhalla_tiles --httpd-service-listen 'tcp://*:8002' > /data/valhalla.json && valhalla_build_tiles -c /data/valhalla.json /data/data.osm.pbf" || exit 0
-  docker run -d --name serve-valhalla --network host -v "$work:/data" --entrypoint bash "$img" -lc "valhalla_service /data/valhalla.json 1" > /dev/null
+  docker run -d --name serve-valhalla --network host ${BENCH_MEM_LIMIT:+--memory "$BENCH_MEM_LIMIT" --memory-swap "$BENCH_MEM_LIMIT"} -v "$work:/data" --entrypoint bash "$img" -lc "valhalla_service /data/valhalla.json 1" > /dev/null
   for _ in $(seq 1 120); do curl -fs -o /dev/null http://127.0.0.1:8002/status && break; sleep 1; done
   for p in car foot bike; do python3 "$here/bench.py" valhalla http://127.0.0.1:8002 "$p" 20 > "$out/routes-valhalla-$p.json" || true; done
   echo "| serve (RAM after queries, all profiles) | - | $(docker stats --no-stream --format '{{.MemUsage}}' serve-valhalla | awk '{print $1}') | - |" >> "$report"
+  echo "| serve OOM-killed under limit '${BENCH_MEM_LIMIT:-none}' | - | $(docker inspect -f '{{.State.OOMKilled}}' serve-valhalla) | - |" >> "$report"
   docker logs --tail 5 serve-valhalla 2>&1 | sed 's/^/  | /'; docker rm -f serve-valhalla > /dev/null ;;
 graphhopper)
   ver=10.2
@@ -83,6 +84,8 @@ for f in "$out"/routes-*.json; do [ -s "$f" ] && python3 - "$f" >> "$report" <<'
 import json, sys
 d = json.load(open(sys.argv[1]))
 print(f"\n{d['engine']} / {d['profile']}:")
+if d.get("load"):
+    print("- load (8 parallel clients, mixed routes):", d["load"])
 for r in d["routes"]:
     print("-", r["route"], (f"{r['km']} km, {r['min']} min, p50 {r['p50_ms']} ms (max {r['max_ms']} ms)" if "km" in r else "ERROR " + r["error"]))
 PY
