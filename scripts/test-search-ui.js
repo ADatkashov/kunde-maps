@@ -124,6 +124,22 @@ const tests = {
     assert.deepEqual(errors, []);
     await context.close();
   },
+  async 'selecting a result cancels a pending search so the list never reappears over the card'(browser) {
+    const {page, context, requests} = await openPage(browser);
+    const input = page.locator('#search-query');
+    await input.fill('Алматы');
+    await results(page).first().waitFor();
+    assert.equal(requests.length, 1);
+    await input.press('End');
+    await input.pressSequentially('а'); // schedules a debounced search (300 ms)
+    await results(page).first().click();  // select before the debounce fires
+    await page.locator('#selection').waitFor();
+    await page.waitForTimeout(900);
+    assert.equal(requests.length, 1, 'pending search must be cancelled');
+    assert.equal(await page.locator('#selection').isVisible(), true);
+    assert.equal(await page.locator('#search-results').isHidden(), true);
+    await context.close();
+  },
   async 'Escape closes the list, second Escape clears the field'(browser) {
     const {page, context} = await openPage(browser);
     const input = page.locator('#search-query');

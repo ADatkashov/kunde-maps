@@ -212,6 +212,9 @@
       try { history.replaceState(null, '', location.pathname + location.search); } catch (_) { /* ignore */ }
     }
     function selectPlace(raw) {
+      // A pending debounced or in-flight search must not redraw the list over the card after selection.
+      clearTimeout(debounceTimer); clearTimeout(retryTimer);
+      controller?.abort(); seq++;
       const place = {lat: raw.lat, lon: raw.lon, kind: raw.kind, title: core.displayName(raw, lang) || tr('place'), raw};
       placeMarker([place.lon, place.lat]);
       showCard(place);
