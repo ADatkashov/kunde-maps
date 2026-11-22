@@ -32,3 +32,5 @@ Phase 2 (this update)
   places need zoom >= 11; no photos/reviews/ratings (no licensed source); saved places do not sync across devices.
 - Web hardening (ADR 0003): MapLibre/PMTiles vendored and checksummed, no inline scripts, strict CSP + security headers generated from the configured origins; verified on the real map with 0 violations. Remaining third-party host: public glyph server.
 - Glyphs self-hosted (Open Sans x4 stacks, ranges 0-1535 + punctuation, 1.6 MB): the page contacts no third-party host; CSP connect-src lists only own origin, tile host and Search API.
+- Phase 4 routing (see docs/routing-api.md, docs/routing-evaluation.md): measured OSRM/Valhalla/GraphHopper; Valhalla chosen. Graph build+publish workflow, authenticated routing front, web route UI (route line, modes, steps, tap-to-set-start) merged; the service on Render is created separately (free tier first).
+- Search: API keys with per-key quotas (server-to-server), house-number address search with proximity and locality.

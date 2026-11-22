@@ -328,3 +328,59 @@ test('every new UI string exists in all languages', () => {
   for (const lang of ['kk', 'en']) assert.deepEqual(Object.keys(core.STRINGS[lang]).sort(), keys.slice().sort(), lang);
   for (const key of ['nearMe', 'openNow', 'route', 'save', 'favorites']) assert.ok(keys.includes(key), key);
 });
+
+// ---- routing client ----------------------------------------------------------------------------------------
+const routeBody = (o = {}) => ({
+  mode: 'car', distance_m: 3510, duration_s: 312, geometry: {type: 'LineString', coordinates: [[76.9456, 43.238], [76.95, 43.25], [76.9567, 43.261]]},
+  bbox: [76.9456, 43.238, 76.9567, 43.261], instruction_language: 'en',
+  steps: [{instruction: 'Head north.', type: 1, street: 'Dostyk', distance_m: 3200, duration_s: 280, location: [76.9456, 43.238]}], ...o,
+});
+const json = (code, body) => ({ok: code < 400, status: code, headers: new Headers(), json: async () => body});
+const routes = fetchImpl => core.createRouteClient({baseUrl: 'https://r.test', fetchImpl, sleep: async () => {}});
+
+test('route client builds a precise GET request, validates and normalizes the reply', async () => {
+  const urls = [];
+  const c = routes(async (url) => { urls.push(url); return json(200, routeBody()); });
+  const route = await c.route({from: {lat: 43.23801234, lon: 76.945678}, to: {lat: 43.261, lon: 76.9567}, mode: 'bike', lang: 'kk'});
+  assert.equal(urls[0], 'https://r.test/v1/route?from=43.23801,76.94568&to=43.26100,76.95670&mode=bike&lang=kk');
+  assert.equal(route.distance, 3510);
+  assert.equal(route.coordinates.length, 3);
+  assert.equal(route.steps[0].street, 'Dostyk');
+  assert.equal(route.narrationLang, 'en');
+});
+
+test('route client rejects malformed replies, bad input and missing configuration', async () => {
+  const bad = [routeBody({mode: 'plane'}), routeBody({distance_m: -1}), routeBody({geometry: {type: 'Point', coordinates: [1, 2]}}),
+    routeBody({geometry: {type: 'LineString', coordinates: [[76.9, 43.2]]}}), routeBody({geometry: {type: 'LineString', coordinates: [[76.9, 43.2], [999, 1]]}}), null, 'x'];
+  for (const body of bad) {
+    await assert.rejects(routes(async () => json(200, body)).route({from: {lat: 43, lon: 76}, to: {lat: 44, lon: 77}}), e => e.code === 'invalid_response', JSON.stringify(body).slice(0, 60));
+  }
+  const dirty = core.validRoute(routeBody({steps: [{instruction: 5, location: [1, 2]}, {instruction: 'ok', location: [999, 1]}, {instruction: 'good', location: [76.9, 43.2], street: 7}]}));
+  assert.deepEqual(dirty.steps.map(s => [s.instruction, s.street]), [['good', '']]);
+  const c = routes(async () => json(200, routeBody()));
+  await assert.rejects(c.route({from: {lat: NaN, lon: 76}, to: {lat: 44, lon: 77}}), e => e.code === 'bad_request');
+  await assert.rejects(c.route({from: {lat: 43, lon: 76}, to: {lat: 44, lon: 77}, mode: 'plane'}), e => e.code === 'bad_request');
+  await assert.rejects(core.createRouteClient({baseUrl: ''}).route({from: {lat: 43, lon: 76}, to: {lat: 44, lon: 77}}), e => e.code === 'not_configured');
+});
+
+test('route client exposes the API error code and never retries', async () => {
+  let calls = 0;
+  for (const [code, error, expected] of [[400, 'outside_coverage', 'bad_request'], [404, 'no_route', 'not_found']]) {
+    const c = routes(async () => { calls++; return json(code, {error}); });
+    await assert.rejects(c.route({from: {lat: 43, lon: 76}, to: {lat: 44, lon: 77}}), e => e.code === expected && e.detail === error);
+  }
+  const down = routes(async () => { calls++; return json(502, {error: 'routing_unavailable'}); });
+  await assert.rejects(down.route({from: {lat: 43, lon: 76}, to: {lat: 44, lon: 77}}), e => e.code === 'unavailable');
+  assert.equal(calls, 3);  // one attempt each, no retry for routes
+  const limited = routes(async () => ({ok: false, status: 429, headers: new Headers({'Retry-After': '7'}), json: async () => ({})}));
+  await assert.rejects(limited.route({from: {lat: 43, lon: 76}, to: {lat: 44, lon: 77}}), e => e.code === 'rate_limited' && e.retryAfter === 7);
+});
+
+test('durations are formatted per language', () => {
+  assert.equal(core.formatDuration(3900, 'ru'), '1 ч 5 мин');
+  assert.equal(core.formatDuration(7200, 'en'), '2 h');
+  assert.equal(core.formatDuration(700, 'en'), '12 min');
+  assert.equal(core.formatDuration(10, 'kk'), '<1 мин');
+  assert.equal(core.formatDuration(NaN, 'ru'), '');
+  for (const lang of core.LANGS) for (const key of ['routeTitle', 'modeCar', 'routeNoRoute', 'routeOutside', 'routeNote', 'routeFailed']) assert.ok(core.t(lang, key), lang + key);
+});

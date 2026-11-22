@@ -41,6 +41,24 @@
       <ul id="favorites-list" class="results" aria-label="Сохранённые"></ul>
       <p id="favorites-empty" class="muted empty" hidden></p>
     </div>
+    <div id="route-panel" class="panel-block route-panel" hidden>
+      <div class="panel-head"><h2 id="route-title"></h2><button id="route-close" class="icon-button plain" type="button">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+      <div class="route-points">
+        <div class="route-point"><span class="route-dot from" aria-hidden="true"></span><span class="route-label" id="route-from-label"></span><span id="route-from" class="route-value"></span><button id="route-pick" class="btn small" type="button"></button></div>
+        <div class="route-point"><span class="route-dot to" aria-hidden="true"></span><span class="route-label" id="route-to-label"></span><span id="route-to" class="route-value"></span><button id="route-swap" class="btn small" type="button"></button></div>
+      </div>
+      <div id="route-modes" class="route-modes" role="group">
+        <button class="mode" type="button" data-mode="car" aria-pressed="true"></button>
+        <button class="mode" type="button" data-mode="foot" aria-pressed="false"></button>
+        <button class="mode" type="button" data-mode="bike" aria-pressed="false"></button>
+      </div>
+      <div id="route-state" class="state" role="status" aria-live="polite" hidden></div>
+      <div id="route-summary" class="route-summary" hidden><strong id="route-total"></strong><span id="route-narration" class="muted"></span></div>
+      <ol id="route-steps" class="route-steps" aria-label="" hidden></ol>
+      <p id="route-note" class="muted"></p>
+      <a id="route-external" class="btn subtle route-external" target="_blank" rel="noopener noreferrer" hidden></a>
+    </div>
     <article id="selection" class="place-card" hidden>
       <div class="place-head">
         <div class="place-title"><p id="selection-chip" class="cat-chip" hidden></p><h2 id="selection-title">Выбранная точка</h2><p id="selection-kind" class="place-kind"></p></div>
