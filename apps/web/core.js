@@ -408,8 +408,20 @@
     return localized || place.name || place.nameRu || place.nameKk || place.nameEn || placeKindLabel(place, lang);
   }
 
+  // Units are a display preference only (the API always speaks metres). 'imperial': feet below 0.1 mi, then miles.
+  let units = 'metric';
+  const setUnits = value => { units = value === 'imperial' ? 'imperial' : 'metric'; };
+  const getUnits = () => units;
+  const IMPERIAL_LABELS = {ru: ['фт', 'ми'], kk: ['фут', 'миля'], en: ['ft', 'mi']};
   function formatDistance(meters, lang) {
     if (!Number.isFinite(meters)) return '';
+    if (units === 'imperial') {
+      const [ft, mi] = IMPERIAL_LABELS[lang] || IMPERIAL_LABELS.ru;
+      const miles = meters / 1609.344;
+      if (miles < 0.1) return Math.round(meters * 3.28084 / 10) * 10 + ' ' + ft;
+      const tenth = Math.round(miles * 10) / 10;
+      return (tenth < 10 ? tenth.toFixed(1) : String(Math.round(miles))) + ' ' + mi;
+    }
     return meters < 1000 ? Math.round(meters / 10) * 10 + ' ' + t(lang, 'meters') : (meters / 1000).toFixed(meters < 10000 ? 1 : 0) + ' ' + t(lang, 'kilometers');
   }
 
@@ -673,7 +685,7 @@
     MIN_CHARS, MAX_CHARS, LANGS, STRINGS, t, normalizeQuery, isSearchable, kindLabel, zoomForKind, displayName,
     formatCoords, parseConfigUrl, validPlace, SearchError, createSearchClient, parsePlaceHash, buildPlaceHash,
     CATEGORIES, CATEGORY_COLORS, CATEGORY_LABELS, PLACE_ID, categoryLabel, placeKindLabel, safeWebsite, telHref, validPoi, poiTitle,
-    formatDistance, formatDuration, validRoute, createRouteClient, ROUTE_MODES, createPlacesClient, parseOpeningHours, openStatus, hoursTable, openLabel, WEEKDAY_LABELS,
+    formatDistance, setUnits, getUnits, formatDuration, validRoute, createRouteClient, ROUTE_MODES, createPlacesClient, parseOpeningHours, openStatus, hoursTable, openLabel, WEEKDAY_LABELS,
     favoriteKey, isFavorite, toggleFavorite, parseFavorites, validFavorite, favoriteTitle,
   };
 });

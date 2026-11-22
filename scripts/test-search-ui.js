@@ -334,7 +334,9 @@ const tests = {
     await page.locator('#search-query').fill('а');
     await page.waitForTimeout(600);
     assert.equal(requests.length, 0);
-    assert.equal(await page.locator('#sheet').isHidden(), true);
+    // Phase 5.5: the sheet is always present; with nothing to show it holds the home panel, never a results list
+    assert.equal(await page.locator('#search-results').isHidden(), true);
+    assert.equal(await page.locator('#home-panel').isVisible(), true);
     await context.close();
   },
   async 'stale responses never overwrite newer ones (race)'(browser) {
@@ -467,7 +469,7 @@ const tests = {
     assert.match(await results(page).first().innerText(), /Алматы қ\.\s+Қала/);
     await page.locator('#language').click();
     assert.match(await results(page).first().innerText(), /Almaty\s+City/);
-    assert.equal(await page.locator('#search-query').getAttribute('placeholder'), 'Search places or addresses');
+    assert.equal(await page.locator('#search-query').getAttribute('placeholder'), 'Search places, addresses, routes');
     const style = (await calls(page)).styles.at(-1);
     assert.equal(style.options.diff, true, 'language switch must diff the style (keeps tiles)');
     const placeLayer = style.style.layers.find(l => l.id === 'place-labels');

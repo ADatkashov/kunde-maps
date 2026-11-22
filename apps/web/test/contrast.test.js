@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const css = ['ui.css', 'nav.css'].map(f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8')).join('\n');
+const css = ['ui.css', 'shell.css', 'nav.css'].map(f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8')).join('\n');
 function tokens(selectorRe) {
   const out = {};
   for (const match of css.matchAll(selectorRe)) for (const [, name, value] of match[1].matchAll(/--([\w-]+):\s*(#[0-9a-fA-F]{6})\b/g)) out[name] = value;
@@ -20,9 +20,14 @@ const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
 
 const PAIRS = [  // [foreground token, background token, what it is, minimum ratio]
   ['on-primary', 'primary', 'maneuver banner text', 4.5], ['text', 'surface', 'bottom bar numbers', 4.5], ['text-2', 'surface', 'bottom bar labels, safety line', 4.5],
-  ['text', 'surface-2', 'highlighted current step', 4.5], ['text-2', 'surface-2', 'step street / distance on highlight', 4.5], ['primary', 'surface', 'recenter button label and step icons', 4.5],
+  ['text', 'surface-2', 'highlighted current step', 4.5], ['text-2', 'surface-2', 'step street / distance on highlight', 4.5], ['primary-text', 'surface', 'recenter button label, links and step icons', 4.5],
   ['on-danger-solid', 'danger-solid', 'End button', 4.5], ['warn', 'warn-bg', 'GPS warning strip', 4.5], ['danger', 'danger-bg', 'reroute error strip', 4.5],
   ['on-primary', 'primary-hover', 'primary button hover', 4.5],
+  // Phase 5.5 shell: text, tabs, chips, cards, switches, success states
+  ['text', 'bg', 'page text', 4.5], ['text-2', 'bg', 'secondary text on the page', 4.5], ['text-2', 'surface-hover', 'secondary text on hovered rows', 4.5],
+  ['primary-text', 'surface-2', 'primary text on tiles and inactive tab fill', 4.5], ['primary-text', 'primary-soft', 'selected route option / empty-state icon', 4.5],
+  ['text', 'primary-soft', 'selected route option text', 4.5], ['ok', 'surface', 'open-now badge', 4.5], ['on-ok-solid', 'ok-solid', 'success fill text', 4.5],
+  ['focus', 'surface', 'focus ring (non-text, 3:1)', 3], ['text-2', 'surface-2', 'secondary text on cards', 4.5],
 ];
 for (const [theme, t] of [['light', light], ['dark', dark]]) {
   test(`WCAG AA contrast, ${theme} theme`, () => {
