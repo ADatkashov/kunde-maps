@@ -694,7 +694,7 @@
       $('places-title').textContent = (placesMode === 'nearby' ? tr('nearMe') : tr('inThisArea')) + ' · ' + placeItems.length;
       $('places-clear').textContent = tr('clearFilters');
       placeItems.forEach((place, index) => placesList.append(placeRow(place, index)));
-      if (!placeItems.length) showPlacesState('info', placesMode === 'nearby' ? tr('nearbyEmpty') : tr('placesEmpty'));
+      if (!placeItems.length) showPlacesState('info', placesMode === 'nearby' ? tr('nearbyEmpty') : tr('placesEmpty'), {hint: tr('placesEmptyHint')});
       else if (info.truncated) { showPlacesState('info', tr('placesTruncated')); }
       else placesStateEl.hidden = true;
       refreshSheetVisibility();
