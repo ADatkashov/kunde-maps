@@ -1,0 +1,145 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:maps/core/platform_api.dart';
+import 'package:maps/core/progress.dart';
+import 'package:maps/core/strings.dart';
+
+void main() {
+  late Json fixture;
+  setUpAll(() {
+    fixture = jsonDecode(
+      File('../web/test/fixtures/route-almaty-car.json').readAsStringSync(),
+    ) as Json;
+  });
+
+  test(
+    'Valhalla longitude first fixture parses and projects the actual start',
+    () {
+      final route = RoadRoute(fixture);
+      expect(route.points.first.lat, 43.238194);
+      expect(route.steps.first.point.lon, 76.94498);
+      final progress = RouteProgress(route, 'car');
+      final now = DateTime.utc(2026);
+      expect(progress.update(route.points.first, 8, now, now), isTrue);
+      expect(progress.remainingMeters, closeTo(route.meters, 1));
+      expect(progress.remainingSeconds, closeTo(route.seconds, 1));
+      expect(progress.nextStep, 1);
+    },
+  );
+
+  test(
+    'poor fixes do not advance and two good terminal fixes confirm arrival',
+    () {
+      final road = RoadRoute({
+        'distance_m': 111,
+        'duration_s': 60,
+        'geometry': {
+          'coordinates': [
+            [76.94, 43.238],
+            [76.94, 43.239],
+          ],
+        },
+        'steps': <Json>[],
+      });
+      final progress = RouteProgress(road, 'foot');
+      final now = DateTime.utc(2026);
+      expect(progress.update(road.points.last, 90, now, now), isFalse);
+      expect(progress.remainingMeters, 111);
+      expect(progress.update(road.points.last, 8, now, now), isTrue);
+      expect(progress.arrived, isFalse);
+      final later = now.add(const Duration(seconds: 1));
+      expect(progress.update(road.points.last, 8, later, later), isTrue);
+      expect(progress.arrived, isTrue);
+      expect(progress.remainingSeconds, closeTo(0, .001));
+    },
+  );
+
+  test('deviation requires three reliable fixes over two seconds', () {
+    final progress = RouteProgress(RoadRoute(fixture), 'car');
+    final now = DateTime.utc(2026);
+    for (var i = 0; i < 3; i++) {
+      final time = now.add(Duration(seconds: i));
+      expect(
+        progress.update(const Point(43.239, 76.94), 5, time, time),
+        isTrue,
+      );
+      expect(progress.offRoute, i == 2);
+    }
+  });
+
+  test('search uses language, proximity, HTTPS and no API key', () async {
+    final api = PlatformApi(
+      MockClient((request) async {
+        expect(request.url.scheme, 'https');
+        expect(request.url.path, '/v1/search');
+        expect(request.url.queryParameters['lang'], 'kk');
+        expect(request.url.queryParameters['q'], 'Абай');
+        expect(request.url.queryParameters['lat'], '43.238');
+        expect(request.headers.containsKey('X-API-Key'), isFalse);
+        return http.Response(
+          jsonEncode({
+            'results': [
+              {'id': 1, 'lat': 43.238, 'lon': 76.945, 'name_kk': 'Абай'},
+            ],
+          }),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+    final places = await api.search(
+      'Абай',
+      'kk',
+      const Point(43.2381, 76.945),
+      Completer<void>().future,
+    );
+    expect(places.single.name('kk', ''), 'Абай');
+  });
+
+  test('places preserve stable IDs and rate-limit delay is surfaced', () async {
+    final api = PlatformApi(
+      MockClient((request) async {
+        if (request.url.path == '/v1/places/n123') {
+          return http.Response(
+            '{"place":{"id":"n123","lat":43,"lon":76,"category":"cafe"}}',
+            200,
+          );
+        }
+        return http.Response(
+          '{"error":"rate_limited"}',
+          429,
+          headers: {'retry-after': '25'},
+        );
+      }),
+    );
+    expect((await api.details('n123')).osmId, 'n123');
+    await expectLater(
+      api.nearby(const Point(43, 76), 'cafe'),
+      throwsA(
+        isA<ApiFailure>().having(
+          (e) => e.retryAfter,
+          'retry-after',
+          const Duration(seconds: 25),
+        ),
+      ),
+    );
+  });
+
+  test(
+    'settings and navigation translations are populated for all languages',
+    () {
+      for (final pair in labels.entries) {
+        expect(pair.value, hasLength(3), reason: pair.key);
+        expect(pair.value.every((text) => text.isNotEmpty), isTrue);
+      }
+      expect(const Words('kk')('search'), 'Іздеу');
+      expect(const Words('ru')('nav'), 'Навигатор');
+      expect(const Words('en')('start'), 'Start navigation');
+    },
+  );
+}
