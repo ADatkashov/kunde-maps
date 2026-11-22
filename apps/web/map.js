@@ -908,7 +908,7 @@
     // request only (sent to our routing API, never stored or logged). Without a configured routing API the button stays an external link.
     const routeClient = routingBase ? core.createRouteClient({baseUrl: routingBase}) : null;
     let routeFrom = null, routeDest = null, routeMode = 'car', routeAbort = null, pickingStart = false, routes = [], routeActive = 0, pinFrom = null, pinTo = null;
-    const routeStateEl = $('route-state'), routeStepsEl = $('route-steps'), routeSummaryEl = $('route-summary'), routeOptionsEl = $('route-options');
+    const routeStateEl = $('route-state'), routeStepsEl = $('route-steps'), stepsWrap = $('route-steps-wrap'), routeSummaryEl = $('route-summary'), routeOptionsEl = $('route-options');
     const fromInput = $('route-from'), toInput = $('route-to');
 
     function setRouteData(list, active) {
@@ -939,6 +939,7 @@
       $('route-locate').setAttribute('aria-label', tr('routeUseMyLocation')); $('route-locate').title = tr('routeUseMyLocation');
       $('route-swap').setAttribute('aria-label', tr('routeSwap')); $('route-swap').title = tr('routeSwap');
       routeStepsEl.setAttribute('aria-label', tr('routeSteps'));
+      $('route-steps-summary').textContent = tr('routeSteps');
       routeOptionsEl.setAttribute('aria-label', tr('routeAlt'));
       $('route-note').textContent = tr('routeNote');
       for (const button of document.querySelectorAll('#route-modes .mode')) button.textContent = tr({car: 'modeCar', foot: 'modeFoot', bike: 'modeBike'}[button.dataset.mode]);
@@ -965,7 +966,7 @@
       if (on) { showRouteState('info', tr('pickHint')); setStatus(tr('pickHint')); }
     }
     function resetRouteResult(keepPins) {
-      routeSummaryEl.hidden = true; routeStepsEl.hidden = true; routeStepsEl.replaceChildren();
+      routeSummaryEl.hidden = true; stepsWrap.hidden = true; routeStepsEl.replaceChildren();
       routeOptionsEl.hidden = true; routeOptionsEl.replaceChildren();
       $('route-external').hidden = true;
       routes = []; routeActive = 0;
@@ -1109,11 +1110,12 @@
         li.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
         routeStepsEl.append(li);
       }
-      routeStepsEl.hidden = !route.steps.length;
+      stepsWrap.hidden = !route.steps.length;
+      if (fit) stepsWrap.open = !isMobile();  // on a phone the step list starts collapsed so the map stays visible
       if (fit && route.bbox) {
         const all = routes.reduce((b, r) => r.bbox ? [Math.min(b[0], r.bbox[0]), Math.min(b[1], r.bbox[1]), Math.max(b[2], r.bbox[2]), Math.max(b[3], r.bbox[3])] : b, route.bbox);
-        const bottom = isMobile() && !sheet.hidden ? Math.min(sheet.offsetHeight, window.innerHeight * 0.62) : 0;
-        map.fitBounds([[all[0], all[1]], [all[2], all[3]]], {padding: {top: 90, left: isMobile() ? 40 : 440, right: 40, bottom: bottom + 40}, maxZoom: 17, duration: 800, essential: false});
+        const fitNow = () => { const bottom = isMobile() && !sheet.hidden ? Math.min(sheet.offsetHeight, window.innerHeight * 0.62) : 0; map.fitBounds([[all[0], all[1]], [all[2], all[3]]], {padding: {top: 90, left: isMobile() ? 40 : 440, right: 40, bottom: bottom + 40}, maxZoom: 17, duration: 800, essential: false}); };
+        requestAnimationFrame(() => requestAnimationFrame(fitNow));  // after the panel has its final height
       }
       syncSheetHeight();
       setStatus(core.formatDistance(route.distance, lang) + ' · ' + core.formatDuration(route.duration, lang));
