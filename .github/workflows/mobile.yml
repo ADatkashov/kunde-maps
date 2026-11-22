@@ -4,12 +4,14 @@ on:
   pull_request:
     paths:
       - 'apps/mobile/**'
+      - 'packages/kunde_maps_sdk/**'
       - 'apps/web/style*.json'
       - '.github/workflows/mobile*.yml'
   push:
     branches: [main]
     paths:
       - 'apps/mobile/**'
+      - 'packages/kunde_maps_sdk/**'
       - 'apps/web/style*.json'
       - '.github/workflows/mobile*.yml'
 
@@ -30,8 +32,8 @@ jobs:
           cache: true
       - name: Check mobile style against the canonical web style
         run: |
-          cmp apps/web/style.json apps/mobile/assets/style.json
-          cmp apps/web/style-dark.json apps/mobile/assets/style-dark.json
+          cmp apps/web/style.json packages/kunde_maps_sdk/assets/style.json
+          cmp apps/web/style-dark.json packages/kunde_maps_sdk/assets/style-dark.json
       - working-directory: apps/mobile
         run: |
           flutter pub get --enforce-lockfile

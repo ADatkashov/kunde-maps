@@ -10,9 +10,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_tts: 4.2.5
   geolocator: 14.1.2
   http: ^1.6.0
+  kunde_maps_sdk:
+    path: ../../packages/kunde_maps_sdk
   maplibre_gl: 0.28.0
   material_ui: ^1.1.0
   share_plus: ^13.0.0
@@ -28,6 +29,3 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/style.json
-    - assets/style-dark.json

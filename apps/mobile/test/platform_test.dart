@@ -6,8 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:maps/core/platform_api.dart';
-import 'package:maps/features/map_style.dart';
-import 'package:maps/core/progress.dart';
+
 import 'package:maps/core/strings.dart';
 
 void main() {
