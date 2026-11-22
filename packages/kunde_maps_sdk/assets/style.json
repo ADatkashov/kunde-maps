@@ -14,7 +14,6 @@
  "sources": {
   "kunde": {
    "type": "vector",
-   "url": "pmtiles://http://localhost:8080/tiles/kazakhstan.pmtiles",
    "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a> © <a href=\"https://openmaptiles.org/\">OpenMapTiles</a>"
   }
  },

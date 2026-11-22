@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the KUNDE Maps MapLibre styles (light + dark) for the OpenMapTiles-schema PMTiles archive.
 
-    python3 scripts/build-style.py            # writes apps/web/style.json and apps/web/style-dark.json
+    python3 scripts/build-style.py            # writes the web styles and SDK templates
     python3 scripts/build-style.py --check    # exits 1 if the committed files differ from the generator output
 
 The generated JSON is committed so the static web image needs no build step. Layers only reference tile layers/fields that
@@ -264,21 +264,29 @@ def build(theme):
     }
 
 
-def render(theme):
-    return json.dumps(build(theme), ensure_ascii=False, indent=1) + "\n"
+def render(theme, native=False):
+    style = build(theme)
+    if native:
+        # The SDK injects the configured HTTPS tile origin before rendering.
+        del style["sources"][SRC]["url"]
+    return json.dumps(style, ensure_ascii=False, indent=1) + "\n"
 
 
 def main():
-    targets = {ROOT / "apps/web/style.json": "light", ROOT / "apps/web/style-dark.json": "dark"}
+    targets = {
+        ROOT / folder / filename: (theme, native)
+        for folder, native in (("apps/web", False), ("packages/kunde_maps_sdk/assets", True))
+        for filename, theme in (("style.json", "light"), ("style-dark.json", "dark"))
+    }
     if "--check" in sys.argv:
-        stale = [str(p) for p, t in targets.items() if not p.exists() or p.read_text(encoding="utf-8") != render(t)]
+        stale = [str(p) for p, args in targets.items() if not p.exists() or p.read_text(encoding="utf-8") != render(*args)]
         if stale:
             print("Out of date (run scripts/build-style.py):", *stale, sep="\n  ")
             return 1
         print("Styles are up to date")
         return 0
-    for path, theme in targets.items():
-        path.write_text(render(theme), encoding="utf-8")
+    for path, (theme, native) in targets.items():
+        path.write_text(render(theme, native), encoding="utf-8")
         print("wrote", path.relative_to(ROOT), f"({len(build(theme)['layers'])} layers)")
     return 0
 

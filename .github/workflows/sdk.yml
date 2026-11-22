@@ -37,11 +37,9 @@ jobs:
         with:
           flutter-version: ${{ matrix.flutter }}
           cache: true
-      - name: SDK style assets equal the canonical web style
+      - name: Verify generated web styles and SDK templates
         working-directory: .
-        run: |
-          cmp apps/web/style.json packages/kunde_maps_sdk/assets/style.json
-          cmp apps/web/style-dark.json packages/kunde_maps_sdk/assets/style-dark.json
+        run: python3 scripts/build-style.py --check
       - run: flutter pub get
       - run: dart format --output=none --set-exit-if-changed lib test
       - run: flutter analyze
