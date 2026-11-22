@@ -46,6 +46,30 @@ def call(engine, base, profile, a, b):
     return p["distance"], p["time"] / 1000, ms
 
 
+def load_test(engine, base, profile, workers=8, per_worker=60):
+    """Concurrent mixed load over the test routes: throughput and tail latency (what a small instance must sustain)."""
+    import concurrent.futures
+    pairs = [(POINTS[a], POINTS[b]) for _, a, b in PAIRS]
+    def work(i):
+        out = []
+        for n in range(per_worker):
+            a, b = pairs[(i + n) % len(pairs)]
+            try:
+                out.append(call(engine, base, profile, a, b)[2])
+            except Exception:
+                out.append(None)
+        return out
+    t = time.perf_counter()
+    with concurrent.futures.ThreadPoolExecutor(workers) as pool:
+        results = [x for part in pool.map(work, range(workers)) for x in part]
+    wall = time.perf_counter() - t
+    ok = sorted(x for x in results if x is not None)
+    if not ok:
+        return {"errors": len(results)}
+    return {"workers": workers, "requests": len(results), "errors": len(results) - len(ok), "rps": round(len(ok) / wall, 1),
+            "p50_ms": round(statistics.median(ok), 1), "p95_ms": round(ok[int(len(ok) * 0.95) - 1], 1)}
+
+
 def main():
     engine, base, profile = sys.argv[1:4]
     repeats = int(sys.argv[4]) if len(sys.argv) > 4 else 20
@@ -64,7 +88,7 @@ def main():
                 except Exception:
                     pass
             rows.append({"route": name, "error": f"{type(exc).__name__}: {exc}{detail}"[:500]})
-    print(json.dumps({"engine": engine, "profile": profile, "routes": rows}))
+    print(json.dumps({"engine": engine, "profile": profile, "routes": rows, "load": load_test(engine, base, profile)}))
 
 
 main()
