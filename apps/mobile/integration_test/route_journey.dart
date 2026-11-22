@@ -144,6 +144,7 @@ void routeJourney(IntegrationTestWidgetsFlutterBinding binding) {
       await tester.ensureVisible(start.first);
       await tester.pumpAndSettle();
       expect(find.textContaining(words('minutes')), findsWidgets);
+      expect(find.textContaining(words('arrivalTime')), findsOneWidget);
       await screenshot('route');
 
       await tap(start);

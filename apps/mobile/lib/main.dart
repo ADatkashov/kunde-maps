@@ -738,6 +738,11 @@ class _MapHomeState extends State<MapHome> {
 
   Widget _planner() {
     final route = _route;
+    final estimatedArrival = route == null
+        ? null
+        : TimeOfDay.fromDateTime(
+            DateTime.now().add(Duration(seconds: route.seconds.round())),
+          ).format(context);
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     return Column(
@@ -767,7 +772,7 @@ class _MapHomeState extends State<MapHome> {
                           ),
                         ),
                         Text(
-                          w('traffic'),
+                          '${w('arrivalTime')} $estimatedArrival · ${w('traffic')}',
                           style: TextStyle(color: colors.onPrimaryContainer),
                         ),
                       ],
@@ -803,11 +808,10 @@ class _MapHomeState extends State<MapHome> {
             ),
           const SizedBox(height: 8),
         ],
-        DecoratedBox(
-          decoration: BoxDecoration(
-            color: colors.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(17),
-          ),
+        Material(
+          color: colors.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(17),
+          clipBehavior: Clip.antiAlias,
           child: Row(
             children: [
               Expanded(

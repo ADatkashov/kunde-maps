@@ -30,6 +30,7 @@ const labels = <String, List<String>>{
   ],
   'origin': ['Откуда', 'Қайдан', 'From'],
   'destination': ['Куда', 'Қайда', 'To'],
+  'arrivalTime': ['Прибытие', 'Келу уақыты', 'Arrival'],
   'layers': ['Слои карты', 'Карта қабаттары', 'Map layers'],
   'mapPoi': ['Места на карте', 'Картадағы орындар', 'Places on the map'],
   'north': ['Север сверху', 'Солтүстік жоғарыда', 'Reset north'],
