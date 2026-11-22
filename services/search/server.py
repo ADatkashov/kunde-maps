@@ -91,6 +91,9 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/metrics":
             self._metrics()
             return "metrics"
+        if parsed.path == "/debug/client":
+            self._debug_client()
+            return "metrics"
         if parsed.path != "/v1/search":
             self.reply(404, {"error": "not_found"})
             return "other"
@@ -126,14 +129,34 @@ class Handler(BaseHTTPRequestHandler):
         return "search"
 
     def _metrics(self):
-        supplied = self.headers.get("Authorization", "")
         if not METRICS_TOKEN:
             self.reply(404, {"error": "not_found"})  # disabled unless a token is configured
-        elif not hmac.compare_digest(supplied.encode(), ("Bearer " + METRICS_TOKEN).encode()):
+        elif not self._authorized():
             self.reply(401, {"error": "unauthorized"}, {"WWW-Authenticate": "Bearer"})
         else:
             body = METRICS.render({"rate_limit_keys": LIMITER.size(), "index_ready": int(DB_PATH.is_file())}).encode()
             self.reply_raw(200, body, "text/plain; version=0.0.4; charset=utf-8")
+
+    def _authorized(self):
+        supplied = self.headers.get("Authorization", "")
+        return bool(METRICS_TOKEN) and hmac.compare_digest(supplied.encode(), ("Bearer " + METRICS_TOKEN).encode())
+
+    def _debug_client(self):
+        """Token-protected: shows how THIS request's client address is derived, to verify MAPS_TRUSTED_PROXY_HOPS
+        behind the hosting proxy. Returns only the caller's own request data and is never logged."""
+        if not METRICS_TOKEN:
+            self.reply(404, {"error": "not_found"})
+        elif not self._authorized():
+            self.reply(401, {"error": "unauthorized"}, {"WWW-Authenticate": "Bearer"})
+        else:
+            forwarded = self.headers.get("X-Forwarded-For", "")
+            self.reply(200, {
+                "x_forwarded_for_entries": [p.strip() for p in forwarded.split(",") if p.strip()],
+                "peer": self.client_address[0], "trusted_hops": TRUSTED_HOPS,
+                "chosen": client_ip(forwarded, self.client_address[0], TRUSTED_HOPS),
+                "other_forwarding_headers": sorted(h for h in self.headers.keys()
+                                                    if h.lower() in ("true-client-ip", "cf-connecting-ip", "x-real-ip", "forwarded", "x-forwarded-proto", "x-forwarded-host")),
+            })
 
     def do_OPTIONS(self):
         self.reply(204, None)
