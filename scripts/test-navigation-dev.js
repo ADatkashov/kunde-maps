@@ -50,7 +50,7 @@ async function open(browser, config, {viewport, mobile, theme, lang, label, hash
   page.on('pageerror', e => problems.push('pageerror: ' + e.message));
   page.on('console', m => { if (['error', 'warning'].includes(m.type()) && !/Failed to load resource|GPU stall|WebGL|Map cannot fit within canvas/.test(m.text())) problems.push(m.type() + ': ' + m.text().slice(0, 200)); });
   page.on('popup', p => popups.push(p.url()));
-  page.on('request', r => { try { hosts.add(new URL(r.url()).host); } catch (_) { /* data: */ } });
+  page.on('request', r => { try { const u = new URL(r.url()); if (u.protocol === 'http:' || u.protocol === 'https:') hosts.add(u.host); } catch (_) { /* not a network request */ } });   // blob:/data: (MapLibre workers) are not network hosts
   page.on('response', async r => { if (/\/v1\/route\?/.test(r.url()) && r.ok()) { try { routeReplies.push({url: r.url(), body: await r.json()}); } catch (_) { /* aborted */ } } });
   await page.addInitScript(() => {
     window.__csp = []; document.addEventListener('securitypolicyviolation', e => window.__csp.push(e.violatedDirective + ' ' + e.blockedURI));
