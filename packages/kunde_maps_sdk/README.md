@@ -1,6 +1,6 @@
 # kunde_maps_sdk
 
-Reusable KUNDE Maps building blocks for Flutter. Version 0.2.0. Contains **no** Taxi, Delivery, Food or payment logic: it shows maps, finds
+Reusable KUNDE Maps building blocks for Flutter. Version 0.2.1. Contains **no** Taxi, Delivery, Food or payment logic: it shows maps, finds
 places, plans routes and guides a user along one. Decisions: [ADR 0007](../../docs/architecture/decisions/0007-kunde-maps-sdk-and-ecosystem-integration.md).
 
 ## Use

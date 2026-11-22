@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import 'config.dart';
 import 'geo.dart';
 import 'geolocation.dart';
+import 'material_scope.dart';
 import 'map_view.dart';
 import 'place_search_field.dart';
 import 'models.dart';
@@ -90,105 +91,107 @@ class _LocationPickerState extends State<LocationPicker> {
   @override
   Widget build(BuildContext context) {
     final issue = _gpsIssue;
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: KundeMapView(
-            config: widget.config,
-            dark: widget.dark,
-            initialCenter: _center,
-            initialZoom: widget.initial == null ? 12 : 16,
-            onReady: (controller) => _map = controller,
-            onCenterChanged: (center) => _center = center,
-            onGestureStart: () => _place = null,
-          ),
-        ),
-        const IgnorePointer(
-          child: Center(
-            child: Padding(
-              padding: EdgeInsets.only(bottom: 36),
-              child: Icon(Icons.location_on, size: 44, color: Colors.red),
+    return MapsMaterialScope(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: KundeMapView(
+              config: widget.config,
+              dark: widget.dark,
+              initialCenter: _center,
+              initialZoom: widget.initial == null ? 12 : 16,
+              onReady: (controller) => _map = controller,
+              onCenterChanged: (center) => _center = center,
+              onGestureStart: () => _place = null,
             ),
           ),
-        ),
-        Positioned(
-          left: 12,
-          right: 12,
-          top: 12,
-          child: SafeArea(
-            child: Card(
+          const IgnorePointer(
+            child: Center(
               child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: _searching
-                    ? ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxHeight: MediaQuery.sizeOf(context).height * .5,
-                        ),
-                        child: SingleChildScrollView(
-                          child: PlaceSearchField(
-                            search: widget.search,
-                            language: widget.config.language,
-                            center: () => _center,
-                            autofocus: true,
-                            onSelected: _choose,
-                          ),
-                        ),
-                      )
-                    : ListTile(
-                        leading: const Icon(Icons.search),
-                        title: Text(widget.title ?? _s('search')),
-                        onTap: () => setState(() => _searching = true),
-                      ),
+                padding: EdgeInsets.only(bottom: 36),
+                child: Icon(Icons.location_on, size: 44, color: Colors.red),
               ),
             ),
           ),
-        ),
-        Positioned(
-          left: 12,
-          right: 12,
-          bottom: 12,
-          child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (issue != null)
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Text(
-                        issue == GpsAccess.serviceOff
-                            ? _s('gpsOff')
-                            : _s('gpsDenied'),
-                      ),
-                    ),
-                  ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FloatingActionButton.small(
-                    heroTag: null,
-                    tooltip: _s('myLocation'),
-                    onPressed: _locating ? null : _locate,
-                    child: _locating
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.my_location),
-                  ),
+          Positioned(
+            left: 12,
+            right: 12,
+            top: 12,
+            child: SafeArea(
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: _searching
+                      ? ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxHeight: MediaQuery.sizeOf(context).height * .5,
+                          ),
+                          child: SingleChildScrollView(
+                            child: PlaceSearchField(
+                              search: widget.search,
+                              language: widget.config.language,
+                              center: () => _center,
+                              autofocus: true,
+                              onSelected: _choose,
+                            ),
+                          ),
+                        )
+                      : ListTile(
+                          leading: const Icon(Icons.search),
+                          title: Text(widget.title ?? _s('search')),
+                          onTap: () => setState(() => _searching = true),
+                        ),
                 ),
-                const SizedBox(height: 8),
-                FilledButton(
-                  onPressed: () => widget.onPicked(
-                    PickedLocation(_place?.point ?? _center, place: _place),
-                  ),
-                  child: Text(_s('confirm')),
-                ),
-              ],
+              ),
             ),
           ),
-        ),
-      ],
+          Positioned(
+            left: 12,
+            right: 12,
+            bottom: 12,
+            child: SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (issue != null)
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text(
+                          issue == GpsAccess.serviceOff
+                              ? _s('gpsOff')
+                              : _s('gpsDenied'),
+                        ),
+                      ),
+                    ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: FloatingActionButton.small(
+                      heroTag: null,
+                      tooltip: _s('myLocation'),
+                      onPressed: _locating ? null : _locate,
+                      child: _locating
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.my_location),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton(
+                    onPressed: () => widget.onPicked(
+                      PickedLocation(_place?.point ?? _center, place: _place),
+                    ),
+                    child: Text(_s('confirm')),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

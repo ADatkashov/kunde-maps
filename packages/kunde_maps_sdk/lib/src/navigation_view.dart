@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import 'config.dart';
 import 'eta.dart';
 import 'map_view.dart';
+import 'material_scope.dart';
 import 'markers.dart';
 import 'navigation.dart';
 import 'strings.dart';
@@ -39,94 +40,99 @@ class NavigationHud extends StatelessWidget {
   final DateTime? now;
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: controller,
-    builder: (context, _) {
-      final s = controller.strings;
-      final progress = controller.progress;
-      final status = controller.status;
-      final next = progress.nextStep;
-      final theme = Theme.of(context);
-      final banner = switch (status) {
-        'arrived' => s('arrived'),
-        'reroute' => s('rerouting'),
-        'weak' => s('weakGps'),
-        'following' => null,
-        final code => s.error(code),
-      };
-      final eta = Eta.fromSeconds(progress.remainingSeconds, now: now);
-      return Material(
-        elevation: 4,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (!controller.arrived && next != null)
-                Semantics(
-                  liveRegion: true,
-                  child: Text(
-                    controller.instruction(progress.route.steps[next]),
-                    style: theme.textTheme.titleLarge,
-                  ),
-                ),
-              if (!controller.arrived && next != null)
-                Text(
-                  formatDistance(progress.maneuverMeters, s.language),
-                  style: theme.textTheme.headlineSmall,
-                ),
-              if (banner != null)
-                Semantics(
-                  liveRegion: true,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
+  Widget build(BuildContext context) => MapsMaterialScope(
+    child: ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final s = controller.strings;
+        final progress = controller.progress;
+        final status = controller.status;
+        final next = progress.nextStep;
+        final theme = Theme.of(context);
+        final banner = switch (status) {
+          'arrived' => s('arrived'),
+          'reroute' => s('rerouting'),
+          'weak' => s('weakGps'),
+          'following' => null,
+          final code => s.error(code),
+        };
+        final eta = Eta.fromSeconds(progress.remainingSeconds, now: now);
+        return Material(
+          elevation: 4,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (!controller.arrived && next != null)
+                  Semantics(
+                    liveRegion: true,
                     child: Text(
-                      banner,
-                      style: TextStyle(
-                        color: status == 'arrived'
-                            ? theme.colorScheme.primary
-                            : theme.colorScheme.error,
+                      controller.instruction(progress.route.steps[next]),
+                      style: theme.textTheme.titleLarge,
+                    ),
+                  ),
+                if (!controller.arrived && next != null)
+                  Text(
+                    formatDistance(progress.maneuverMeters, s.language),
+                    style: theme.textTheme.headlineSmall,
+                  ),
+                if (banner != null)
+                  Semantics(
+                    liveRegion: true,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(
+                        banner,
+                        style: TextStyle(
+                          color: status == 'arrived'
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.error,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              if (controller.canRetry)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(
-                    onPressed: controller.retry,
-                    child: Text(s('retry')),
-                  ),
-                ),
-              if (controller.voiceUnavailable) Text(s('noVoice')),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${s('remaining')}: '
-                      '${formatDistance(progress.remainingMeters, s.language)}'
-                      ' · ${eta.minutes} ${s.language == 'en' ? 'min' : 'мин'}'
-                      ' · ${eta.clock}',
+                if (controller.canRetry)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: controller.retry,
+                      child: Text(s('retry')),
                     ),
                   ),
-                  IconButton(
-                    tooltip: controller.voice ? s('voiceOn') : s('voiceOff'),
-                    icon: Icon(
-                      controller.voice ? Icons.volume_up : Icons.volume_off,
+                if (controller.voiceUnavailable) Text(s('noVoice')),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${s('remaining')}: '
+                        '${formatDistance(progress.remainingMeters, s.language)}'
+                        ' · ${eta.minutes} ${s.language == 'en' ? 'min' : 'мин'}'
+                        ' · ${eta.clock}',
+                      ),
                     ),
-                    onPressed: () => controller.setVoice(!controller.voice),
-                  ),
-                ],
-              ),
-              FilledButton.tonal(onPressed: onStop, child: Text(s('stopNav'))),
-            ],
+                    IconButton(
+                      tooltip: controller.voice ? s('voiceOn') : s('voiceOff'),
+                      icon: Icon(
+                        controller.voice ? Icons.volume_up : Icons.volume_off,
+                      ),
+                      onPressed: () => controller.setVoice(!controller.voice),
+                    ),
+                  ],
+                ),
+                FilledButton.tonal(
+                  onPressed: onStop,
+                  child: Text(s('stopNav')),
+                ),
+              ],
+            ),
           ),
-        ),
-      );
-    },
+        );
+      },
+    ),
   );
 }
 
@@ -218,56 +224,58 @@ class _NavigationViewState extends State<NavigationView> {
   @override
   Widget build(BuildContext context) {
     final s = MapsStrings(widget.config.language);
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: KundeMapView(
-            config: widget.config,
-            dark: widget.dark,
-            initialCenter: _nav.progress.route.points.first,
-            initialZoom: 14,
-            onReady: (map) {
-              _map = map;
-              _paint();
-            },
-            onGestureStart: () {
-              if (_nav.follow) {
-                _nav.follow = false;
-                setState(() {});
-              }
-            },
-          ),
-        ),
-        Positioned(
-          left: 12,
-          right: 12,
-          bottom: 12,
-          child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                if (!_nav.follow && _nav.position != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: FloatingActionButton.small(
-                      heroTag: null,
-                      tooltip: s('recenter'),
-                      onPressed: () {
-                        _nav.follow = true;
-                        _lastFix = null;
-                        setState(() {});
-                        _sync();
-                      },
-                      child: const Icon(Icons.my_location),
-                    ),
-                  ),
-                NavigationHud(controller: _nav, onStop: widget.onStop),
-              ],
+    return MapsMaterialScope(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: KundeMapView(
+              config: widget.config,
+              dark: widget.dark,
+              initialCenter: _nav.progress.route.points.first,
+              initialZoom: 14,
+              onReady: (map) {
+                _map = map;
+                _paint();
+              },
+              onGestureStart: () {
+                if (_nav.follow) {
+                  _nav.follow = false;
+                  setState(() {});
+                }
+              },
             ),
           ),
-        ),
-      ],
+          Positioned(
+            left: 12,
+            right: 12,
+            bottom: 12,
+            child: SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (!_nav.follow && _nav.position != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: FloatingActionButton.small(
+                        heroTag: null,
+                        tooltip: s('recenter'),
+                        onPressed: () {
+                          _nav.follow = true;
+                          _lastFix = null;
+                          setState(() {});
+                          _sync();
+                        },
+                        child: const Icon(Icons.my_location),
+                      ),
+                    ),
+                  NavigationHud(controller: _nav, onStop: widget.onStop),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

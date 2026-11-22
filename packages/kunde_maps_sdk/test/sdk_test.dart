@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+// ignore: deprecated_member_use
+import 'package:flutter/material.dart' as flutter_material;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
@@ -107,6 +109,7 @@ class _FakeGps extends GeolocatorPlatform {
 }
 
 void main() {
+  hostMaterialTests();
   group('device location', () {
     late GeolocatorPlatform previous;
     late _FakeGps gps;
@@ -744,5 +747,36 @@ void main() {
         );
       },
     );
+  });
+}
+
+// A host app built on package:flutter/material.dart provides a different
+// MaterialLocalizations type than the SDK's material_ui; the SDK must not
+// depend on it. Reproduces the failure found by the Android emulator E2E.
+void hostMaterialTests() {
+  testWidgets('PlaceSearchField works inside a flutter/material host app', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      flutter_material.MaterialApp(
+        home: flutter_material.Scaffold(
+          body: PlaceSearchField(
+            search: PlaceSearch(
+              MapsClient(
+                _config(),
+                MockClient((_) async => http.Response('{"results":[]}', 200)),
+              ),
+            ),
+            language: 'en',
+            center: () => const GeoPoint(43.2, 76.9),
+            onSelected: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.enterText(find.byType(TextField), 'abc');
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(tester.takeException(), isNull);
+    expect(find.byType(TextField), findsOneWidget);
   });
 }
