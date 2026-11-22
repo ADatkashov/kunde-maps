@@ -203,6 +203,14 @@ class ProtectedServerTest(unittest.TestCase):
         line = json.loads(buffer.getvalue().strip().splitlines()[-1])
         self.assertEqual(set(line), {"route", "status", "ms"})
 
+    def test_debug_client_is_token_protected_and_reports_derivation(self):
+        self.assertEqual(self.get("/debug/client")[0], 404)
+        server.METRICS_TOKEN = "tok"
+        self.assertEqual(self.get("/debug/client")[0], 401)
+        status, _, body = self.get("/debug/client", {"Authorization": "Bearer tok", "X-Forwarded-For": "6.6.6.6, 203.0.113.9"})
+        data = json.loads(body)
+        self.assertEqual((status, data["chosen"], data["x_forwarded_for_entries"]), (200, "203.0.113.9", ["6.6.6.6", "203.0.113.9"]))
+
     def test_busy_when_concurrency_gate_is_full(self):
         server.GATE = protection.ConcurrencyGate(1)
         server.GATE._sem.acquire()
