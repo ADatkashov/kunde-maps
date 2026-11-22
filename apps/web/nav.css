@@ -6,7 +6,7 @@
 .btn.big { min-height: 54px; font-size: 17px; width: 100%; border-radius: var(--radius); }
 .btn.danger { background: var(--danger-solid); border-color: var(--danger-solid); color: var(--on-danger-solid); }
 .btn.danger:hover { filter: brightness(.94); background: var(--danger-solid); }
-.route-start-row { display: flex; flex-direction: column; gap: 8px; padding: 6px 14px 12px; }
+.route-start-row { display: flex; flex-direction: column; gap: 6px; padding: 14px 14px 10px; position: sticky; bottom: 0; z-index: 2; background: linear-gradient(to bottom, transparent, var(--surface) 12px); }   /* Start stays reachable while the route details scroll */
 .route-safety { margin: 0; font-size: 12px; line-height: 1.4; }
 
 /* While navigating only the map and the HUD remain. */

@@ -249,6 +249,15 @@ const tests = {
     assert.equal(await page.locator('#selection-open').isHidden(), true);
     assert.deepEqual((await page.locator('.place-actions .btn:visible').allInnerTexts()).map(t => t.trim()).slice(0, 3), ['Маршрут', 'Сохранить', 'Поделиться']);
     assert.equal(await snap(page), 'half', 'a card opens the sheet half way');
+    // every action stays inside the sheet at every phone width (a clipped Share button is invisible to a page-overflow check)
+    for (const [w, h] of SIZES) {
+      await page.setViewportSize({width: w, height: h}); await page.waitForTimeout(150);
+      const out = await page.evaluate(() => { const s = document.getElementById('sheet').getBoundingClientRect(); return [...document.querySelectorAll('.place-actions .btn')].filter(b => b.offsetParent).filter(b => { const r = b.getBoundingClientRect(); return r.left < s.left - 0.5 || r.right > s.right + 0.5; }).map(b => b.id || b.textContent); });
+      assert.deepEqual(out, [], `place actions inside the sheet at ${w}px`);
+    }
+    // the toast never sits on the OSM attribution strip (checked on the real map in the live suite; the mocked map has no attribution control)
+    const toast = await page.evaluate(() => { const st = document.getElementById('status'); st.textContent = 'Тест'; st.classList.remove('quiet'); const r = st.getBoundingClientRect(); const sheet = document.getElementById('sheet').getBoundingClientRect(); return {gap: sheet.top - r.bottom}; });
+    assert.ok(toast.gap >= 24, 'the toast floats at least 24 px above the sheet (room for the attribution strip): ' + toast.gap);
     await context.close();
   },
   async 'search history: kept on the device, shown on Home, re-runs a search, can be switched off and clears itself'(browser) {

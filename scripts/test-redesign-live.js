@@ -10,6 +10,7 @@ const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const nav = require('../apps/web/nav.js');
 
 const WEB = (process.env.WEB_URL || 'https://kunde-maps-web-dev.onrender.com').replace(/\/$/, '');
 const SPOOF = process.env.SPOOF_ORIGIN || '';
@@ -20,7 +21,7 @@ const log = (...a) => console.log(...a);
 const shot = async (page, name) => { if (SHOTS) { fs.mkdirSync(SHOTS, {recursive: true}); await page.screenshot({path: path.join(SHOTS, name + '.png')}); } };
 
 async function config() {
-  const res = await fetch(WEB + '/config.json', {signal: AbortSignal.timeout(30000)});
+  const res = await fetch((SPOOF || WEB) + '/config.json', {signal: AbortSignal.timeout(30000)});   // a local build takes the DEV runtime config (backends + tiles)
   assert.ok(res.ok, 'config.json is served');
   return res.json();
 }
@@ -36,13 +37,16 @@ async function warmUp(cfg) {
   }
 }
 
+function ctx_routeReplies(page, list) { page.on('response', async r => { if (/\/v1\/route\?/.test(r.url()) && r.ok()) { try { list.push(await r.json()); } catch (_) { /* aborted */ } } }); }
 async function open(browser, cfg, {viewport = {width: 390, height: 844}, mobile = true, theme = 'dark', lang, hash = '', geo = true} = {}) {
+  if (process.env.DBG) console.log('  open: newContext');
   const context = await browser.newContext({viewport, isMobile: mobile, hasTouch: mobile, colorScheme: theme, deviceScaleFactor: mobile ? 2 : 1,
     ...(geo ? {permissions: ['geolocation'], geolocation: HOME} : {})});
   const page = await context.newPage();
-  const problems = [], hosts = new Set();
+  const problems = [], hosts = new Set(), routeReplies = [];
   page.on('pageerror', e => problems.push('pageerror: ' + e.message));
   page.on('console', m => { if (['error', 'warning'].includes(m.type()) && !/Failed to load resource|GPU stall|WebGL|Map cannot fit within canvas/.test(m.text())) problems.push(m.type() + ': ' + m.text().slice(0, 200)); });
+  ctx_routeReplies(page, routeReplies);
   page.on('request', r => { try { const u = new URL(r.url()); if (u.protocol === 'http:' || u.protocol === 'https:') hosts.add(u.host); } catch (_) { /* blob/data */ } });
   await page.addInitScript(() => {
     window.__csp = []; document.addEventListener('securitypolicyviolation', e => window.__csp.push(e.violatedDirective + ' ' + e.blockedURI));
@@ -53,15 +57,17 @@ async function open(browser, cfg, {viewport = {width: 390, height: 844}, mobile 
   if (SPOOF) {
     await page.route('**/config.json', route => route.fulfill({status: 200, contentType: 'application/json', body: JSON.stringify(cfg)}));
     for (const origin of [cfg.routingUrl, cfg.searchUrl, new URL(cfg.tileUrl).origin]) await page.route(origin + '/**', async route => {
-      const req = route.request();
-      const response = await route.fetch({headers: {...req.headers(), origin: SPOOF}});
-      await route.fulfill({response, headers: {...response.headers(), 'access-control-allow-origin': '*', 'access-control-expose-headers': 'Content-Range,Content-Length,Retry-After,Accept-Ranges',
-        'access-control-allow-headers': 'range,content-type,x-api-key'}});
+      try {   // a request still in flight when the scenario ends is not an error of the app under test
+        const req = route.request();
+        const response = await route.fetch({headers: {...req.headers(), origin: SPOOF}});
+        await route.fulfill({response, headers: {...response.headers(), 'access-control-allow-origin': '*', 'access-control-expose-headers': 'Content-Range,Content-Length,Retry-After,Accept-Ranges',
+          'access-control-allow-headers': 'range,content-type,x-api-key'}});
+      } catch (_) { /* context closed */ }
     });
   }
   await page.goto(WEB + '/' + hash, {waitUntil: 'domcontentloaded'});
   await page.locator('#status').filter({hasText: /Карта загружена|Карта жүктелді|Map loaded/}).waitFor({timeout: 60000});
-  return {page, context, problems, hosts, cfg};
+  return {page, context, problems, hosts, cfg, routeReplies};
 }
 async function finish(ctx, label) {
   const csp = await ctx.page.evaluate(() => window.__csp);
@@ -69,7 +75,20 @@ async function finish(ctx, label) {
   assert.deepEqual(ctx.problems, [], label + ': console problems');
   const allowed = new Set([new URL(WEB).host, new URL(ctx.cfg.routingUrl).host, new URL(ctx.cfg.searchUrl).host, new URL(ctx.cfg.tileUrl).host]);
   assert.deepEqual([...ctx.hosts].filter(h => !allowed.has(h)), [], label + ': requests to hosts outside the app');
+  if (process.env.DBG) console.log('  finish: unroute');
+  await ctx.page.unrouteAll({behavior: 'ignoreErrors'}).catch(() => {});
+  if (process.env.DBG) console.log('  finish: close');
   await ctx.context.close();
+  if (process.env.DBG) console.log('  finish: done');
+}
+
+// Simulated GPS along the geometry the real Routing API returned (same approach as scripts/test-navigation-dev.js).
+function indexOf(coords) { return nav.createRouteIndex({coordinates: coords, mode: 'car', distance: 0, duration: 1, steps: []}); }
+function pointAt(index, s) {
+  const c = Math.min(Math.max(s, 0), index.total);
+  let i = 0; while (i < index.pts.length - 2 && index.cum[i + 1] < c) i++;
+  const t = (c - index.cum[i]) / Math.max(index.cum[i + 1] - index.cum[i], 1e-9);
+  return {latitude: index.pts[i][1] + t * (index.pts[i + 1][1] - index.pts[i][1]), longitude: index.pts[i][0] + t * (index.pts[i + 1][0] - index.pts[i][0])};
 }
 const rect = (page, sel) => page.locator(sel).evaluate(el => el.getBoundingClientRect().toJSON());
 const overlap = (a, b) => !(a.bottom <= b.top || a.top >= b.bottom || a.right <= b.left || a.left >= b.right);
@@ -113,7 +132,7 @@ const scenarios = {
     assert.match(await page.locator('#favorites-list').innerText(), new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').slice(0, 20)));
     await finish(ctx, 'search');
   },
-  async 'real categories: chip and "near you" tiles return real places from the Places API; distances ascend'(browser, cfg) {
+  async 'real categories: chip and "near you" tiles return real places from the Places API; nearby results are inside the radius'(browser, cfg) {
     const ctx = await open(browser, cfg);
     const {page} = ctx;
     await page.locator('#chips .chip[data-category=pharmacy]').click();
@@ -128,8 +147,9 @@ const scenarios = {
     await page.locator('#places-list .row').first().waitFor();
     assert.equal(await page.evaluate(() => window.__geo.gets), 1, 'the tap (user action) asked for the position once');
     const subs = await page.locator('#places-list .result-sub').allInnerTexts();
-    const metres = subs.map(t => (t.match(/(\d+(?:\.\d)?)\s*(км|м)\b/) || [])).filter(m => m[1]).map(m => m[2] === 'км' ? parseFloat(m[1]) * 1000 : parseFloat(m[1]));
-    assert.ok(metres.length >= 1 && metres.every((v, i) => i === 0 || v >= metres[i - 1] - 60), 'nearby results are ordered by distance: ' + metres.join(','));
+    const metres = subs.map(t => (t.match(/(\d+(?:\.\d)?)\s*(км|м)(?![\p{L}])/u) || [])).filter(m => m[1]).map(m => m[2] === 'км' ? parseFloat(m[1]) * 1000 : parseFloat(m[1]));
+    // the API ranks by distance minus a completeness bonus (docs/places-api.md), so the order is only roughly ascending: everything is inside the 1.5 km radius and the nearest is near the top
+    assert.ok(metres.length >= 1 && Math.max(...metres) <= 1500 && metres.indexOf(Math.min(...metres)) < 5, 'nearby results are within the radius, nearest near the top: ' + metres.join(','));
     await shot(page, 'live-nearby-pharmacies');
     await page.locator('#places-list .row').first().click();
     await page.locator('#selection').waitFor();
@@ -167,13 +187,15 @@ const scenarios = {
     await page.locator('#route-place').click();
     await page.locator('#route-start').waitFor({state: 'visible', timeout: 120000});
     await page.locator('#route-start').click();
-    await page.locator('#nav[data-state=ACTIVE], #nav:not([hidden])').first().waitFor({timeout: 20000});
+    await page.locator('#nav:not([hidden])').waitFor({timeout: 20000});
+    assert.match(await page.locator('#nav-text').innerText(), /Начните движение/, 'a standing device is asked to start moving (Phase 5 behaviour)');
+    const ix = indexOf(ctx.routeReplies.at(-1).geometry.coordinates);
+    for (let s = 0; s <= 130 && (await page.locator('#nav').getAttribute('data-state')) !== 'ACTIVE'; s += 26) { await context.setGeolocation({...pointAt(ix, s), accuracy: 8}); await sleep(1300); }
     await page.locator('#nav[data-state=ACTIVE]').waitFor({timeout: 20000});
     for (const sel of ['#tabbar', '#sheet', '#map-tools', '.brand-row']) assert.equal(await page.locator(sel).isHidden(), true, sel + ' is hidden during navigation');
     assert.ok((await page.locator('#nav-dist').innerText()).trim(), 'maneuver distance shown');
     assert.equal(await page.evaluate(() => window.__geo.starts), 1);
-    await context.setGeolocation({latitude: 43.2395, longitude: 76.9458, accuracy: 8});
-    await sleep(1500);
+    await sleep(800);
     await shot(page, 'live-navigation-hud');
     const attrib = await page.evaluate(() => { const a = document.querySelector('.maplibregl-ctrl-attrib').getBoundingClientRect(), b = document.querySelector('#nav-bottom').getBoundingClientRect(); return !(a.bottom <= b.top || a.top >= b.bottom || a.right <= b.left || a.left >= b.right); });
     assert.equal(attrib, false, 'attribution not covered by the navigation panel');
@@ -241,7 +263,11 @@ const scenarios = {
     for (const [name, fn] of Object.entries(scenarios)) {
       if (only && !name.includes(only)) continue;
       const t0 = Date.now();
-      try { await fn(browser, cfg); console.log(`ok   - ${name} (${Math.round((Date.now() - t0) / 1000)} s)`); }
+      try {
+        let timer;
+        await Promise.race([fn(browser, cfg), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('scenario exceeded 240 s (stuck, not asserted)')), 240000); })]).finally(() => clearTimeout(timer));
+        console.log(`ok   - ${name} (${Math.round((Date.now() - t0) / 1000)} s)`);
+      }
       catch (error) { failed++; console.error('FAIL -', name, '\n      ', error.message.split('\n').slice(0, 8).join('\n       ')); }
     }
   } finally { await browser.close(); }
