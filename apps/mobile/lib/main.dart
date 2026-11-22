@@ -82,6 +82,7 @@ class _MapHomeState extends State<MapHome> {
   final _http = http.Client();
   late final _api = PlatformApi(_http);
   final _query = TextEditingController();
+  final _routeSheet = DraggableScrollableController();
   final _favorites = <String, Place>{};
   final _camera = const map.CameraPosition(
     target: map.LatLng(48.1, 67.8),
@@ -105,6 +106,7 @@ class _MapHomeState extends State<MapHome> {
   int? _endpoint;
   bool _picking = false;
   bool _loading = false;
+  late bool _showMapPois = widget.prefs.getBool('mapPoi') ?? true;
   bool _mapReady = false;
   bool _tileRenderReady = false;
   bool _painting = false;
@@ -152,8 +154,12 @@ class _MapHomeState extends State<MapHome> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _syncStyle();
+  }
+
+  void _syncStyle() {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final key = '$dark/${w.language}';
+    final key = '$dark/${w.language}/$_showMapPois';
     if (_styleKey != key) {
       _styleKey = key;
       unawaited(_loadStyle(dark, key));
@@ -162,7 +168,7 @@ class _MapHomeState extends State<MapHome> {
 
   Future<void> _loadStyle(bool dark, String key) async {
     try {
-      final style = await nativeStyle(dark, w.language);
+      final style = await nativeStyle(dark, w.language, showPoi: _showMapPois);
       if (!mounted || _styleKey != key) return;
       setState(() {
         _style = style;
@@ -364,6 +370,9 @@ class _MapHomeState extends State<MapHome> {
         _routeIndex = 0;
       });
       _redraw();
+      if (_routeSheet.isAttached) {
+        _routeSheet.jumpTo(.43);
+      }
       unawaited(_fit(routes.first));
     } catch (error) {
       if (mounted && token == _request) {
@@ -596,7 +605,8 @@ class _MapHomeState extends State<MapHome> {
           contentPadding: EdgeInsets.zero,
           title: Text(
             _name(place),
-            style: Theme.of(context).textTheme.titleLarge,
+            style: Theme.of(context).textTheme.headlineSmall
+                ?.copyWith(fontWeight: FontWeight.w800),
           ),
           subtitle: place.data['category'] == null
               ? null
@@ -610,18 +620,28 @@ class _MapHomeState extends State<MapHome> {
             },
           ),
         ),
-        for (final field in [
-          'address',
-          'locality',
-          'hours',
-          'phone',
-          'website',
+        for (final (field, icon) in [
+          ('address', Icons.place_outlined),
+          ('locality', Icons.location_city_outlined),
+          ('hours', Icons.schedule_outlined),
+          ('phone', Icons.phone_outlined),
+          ('website', Icons.language),
         ])
-          if (place.data[field] is String &&
-              (place.data[field] as String).isNotEmpty)
+          if (place.data[field] case final String value when value.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text(place.data[field] as String),
+              padding: const EdgeInsets.only(bottom: 9),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    icon,
+                    size: 19,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(child: Text(value)),
+                ],
+              ),
             ),
         if (place.data['distance_m'] is num)
           Text(_distance((place.data['distance_m'] as num).toDouble())),
@@ -716,108 +736,184 @@ class _MapHomeState extends State<MapHome> {
     }
   }
 
-  Widget _planner() => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      for (final (index, key, place) in [
-        (0, 'origin', _origin),
-        (1, 'destination', _destination),
-      ])
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: Icon(index == 0 ? Icons.trip_origin : Icons.place_outlined),
-          title: Text(place == null ? w(key) : _name(place)),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _chooseEndpoint(index),
-        ),
-      Wrap(
-        spacing: 6,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          IconButton(
-            tooltip: w('swap'),
-            icon: const Icon(Icons.swap_vert),
-            onPressed: _origin == null || _destination == null
-                ? null
-                : () {
-                    _request++;
-                    setState(() {
-                      final previousOrigin = _origin;
-                      _origin = _destination;
-                      _destination = previousOrigin;
-                      _routes = [];
-                      _loading = false;
-                      _error = null;
-                    });
-                    _redraw();
-                  },
-          ),
-          for (final mode in ['car', 'foot', 'bike'])
-            ChoiceChip(
-              label: Text(w(mode)),
-              selected: _mode == mode,
-              onSelected: (chosen) {
-                if (!chosen) return;
-                _request++;
-                setState(() {
-                  _mode = mode;
-                  _routes = [];
-                  _loading = false;
-                  _error = null;
-                });
-                _redraw();
-              },
+  Widget _planner() {
+    final route = _route;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (route != null) ...[
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: colors.primaryContainer,
+              borderRadius: BorderRadius.circular(17),
             ),
+            child: Padding(
+              padding: const EdgeInsets.all(13),
+              child: Row(
+                children: [
+                  Icon(Icons.alt_route, color: colors.onPrimaryContainer),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${_distance(route.meters)} · ${_duration(route.seconds)}',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            color: colors.onPrimaryContainer,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          w('traffic'),
+                          style: TextStyle(color: colors.onPrimaryContainer),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_routes.length > 1)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final (index, option) in _routes.indexed)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8, top: 3),
+                      child: ChoiceChip(
+                        label: Text(
+                          '${_distance(option.meters)} · ${_duration(option.seconds)}',
+                        ),
+                        selected: index == _routeIndex,
+                        onSelected: (selected) {
+                          if (!selected) return;
+                          setState(() => _routeIndex = index);
+                          _redraw();
+                          unawaited(_fit(option));
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 8),
         ],
-      ),
-      const SizedBox(height: 10),
-      FilledButton(
-        onPressed: _origin == null || _destination == null || _loading
-            ? null
-            : _buildRoute,
-        child: Text(w('build')),
-      ),
-      if (_route != null) ...[
-        const SizedBox(height: 8),
-        Text(w('traffic'), style: Theme.of(context).textTheme.bodySmall),
-        for (final (index, route) in _routes.indexed)
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(
-              index == _routeIndex
-                  ? Icons.radio_button_checked
-                  : Icons.radio_button_unchecked,
-            ),
-            title: Text(
-              '${_distance(route.meters)} · ${_duration(route.seconds)}',
-            ),
-            onTap: () {
-              setState(() => _routeIndex = index);
-              _redraw();
-              unawaited(_fit(route));
-            },
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: colors.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(17),
           ),
-        FilledButton.icon(
-          onPressed: _starting ? null : _start,
-          icon: const Icon(Icons.navigation_outlined),
-          label: Text(w('start')),
-        ),
-        ExpansionTile(
-          tilePadding: EdgeInsets.zero,
-          title: Text(w('directions')),
-          children: [
-            for (final step in _route!.steps)
-              ListTile(
-                title: Text(step.instruction),
-                subtitle: _route!.language == w.language
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  children: [
+                    for (final (index, key, place) in [
+                      (0, 'origin', _origin),
+                      (1, 'destination', _destination),
+                    ]) ...[
+                      if (index == 1) const Divider(height: 1, indent: 44),
+                      ListTile(
+                        dense: true,
+                        contentPadding: const EdgeInsets.only(
+                          left: 10,
+                          right: 4,
+                        ),
+                        leading: CircleAvatar(
+                          radius: 13,
+                          backgroundColor: index == 0
+                              ? colors.primary
+                              : colors.tertiary,
+                          foregroundColor: index == 0
+                              ? colors.onPrimary
+                              : colors.onTertiary,
+                          child: Text(index == 0 ? 'A' : 'B'),
+                        ),
+                        title: Text(w(key), style: theme.textTheme.labelMedium),
+                        subtitle: place == null
+                            ? null
+                            : Text(
+                                _name(place),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                        onTap: () => _chooseEndpoint(index),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: w('swap'),
+                icon: const Icon(Icons.swap_vert),
+                onPressed: _origin == null || _destination == null
                     ? null
-                    : Text(_route!.language.toUpperCase()),
+                    : () {
+                        _request++;
+                        setState(() {
+                          final previousOrigin = _origin;
+                          _origin = _destination;
+                          _destination = previousOrigin;
+                          _routes = [];
+                          _loading = false;
+                          _error = null;
+                        });
+                        _redraw();
+                      },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        SegmentedButton<String>(
+          showSelectedIcon: false,
+          segments: [
+            for (final (mode, icon) in [
+              ('car', Icons.directions_car_outlined),
+              ('foot', Icons.directions_walk),
+              ('bike', Icons.directions_bike),
+            ])
+              ButtonSegment(
+                value: mode,
+                icon: Icon(icon, size: 17),
+                label: Text(w(mode)),
               ),
           ],
+          selected: {_mode},
+          onSelectionChanged: (selected) {
+            if (selected.single == _mode) return;
+            _request++;
+            setState(() {
+              _mode = selected.single;
+              _routes = [];
+              _loading = false;
+              _error = null;
+            });
+            _redraw();
+          },
         ),
+        if (route != null)
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: Text(w('directions')),
+            children: [
+              for (final step in route.steps)
+                ListTile(
+                  title: Text(step.instruction),
+                  subtitle: route.language == w.language
+                      ? null
+                      : Text(route.language.toUpperCase()),
+                ),
+            ],
+          ),
       ],
-    ],
-  );
+    );
+  }
 
   Future<void> _preference(String key, String value) async {
     await widget.prefs.setString(key, value);
@@ -888,7 +984,7 @@ class _MapHomeState extends State<MapHome> {
           showLicensePage(
             context: context,
             applicationName: 'KUNDE Maps',
-            applicationVersion: '0.6.0',
+            applicationVersion: '0.6.1',
           );
         },
       ),
@@ -925,26 +1021,29 @@ class _MapHomeState extends State<MapHome> {
         ],
         if (session.voiceUnavailable) Text(w('noVoice')),
         if (session.notificationsDisabled) Text(w('notificationsOff')),
-        Wrap(
-          spacing: 10,
-          children: [
-            OutlinedButton(
-              onPressed: _end,
-              child: Text(w(session.active ? 'stop' : 'close')),
-            ),
-            if (session.active && session.issue != null)
-              TextButton(
-                onPressed: session.canRetry ? session.retry : null,
-                child: Text(w('retry')),
-              ),
-            if (session.active)
-              IconButton(
-                tooltip: w('voice'),
-                icon: Icon(session.voice ? Icons.volume_up : Icons.volume_off),
-                onPressed: () => session.setVoice(!session.voice),
-              ),
-          ],
+      ],
+    );
+  }
+
+  Widget _navigationActions(NavigationSession session) {
+    return Wrap(
+      spacing: 10,
+      children: [
+        OutlinedButton(
+          onPressed: _end,
+          child: Text(w(session.active ? 'stop' : 'close')),
         ),
+        if (session.active && session.issue != null)
+          TextButton(
+            onPressed: session.canRetry ? session.retry : null,
+            child: Text(w('retry')),
+          ),
+        if (session.active)
+          IconButton(
+            tooltip: w('voice'),
+            icon: Icon(session.voice ? Icons.volume_up : Icons.volume_off),
+            onPressed: () => session.setVoice(!session.voice),
+          ),
       ],
     );
   }
@@ -968,6 +1067,22 @@ class _MapHomeState extends State<MapHome> {
     ],
   );
 
+  Widget _routeAction() {
+    final ready = _route != null;
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        icon: Icon(ready ? Icons.navigation_outlined : Icons.alt_route),
+        label: Text(w(ready ? 'start' : 'build')),
+        onPressed: ready
+            ? (_starting || _loading ? null : _start)
+            : (_origin == null || _destination == null || _loading
+                  ? null
+                  : _buildRoute),
+      ),
+    );
+  }
+
   Widget _sheet() {
     if (_picking) return const SizedBox.shrink();
     return LayoutBuilder(
@@ -976,15 +1091,27 @@ class _MapHomeState extends State<MapHome> {
         final footer = MediaQuery.textScalerOf(context).scale(11) > 15
             ? 96
             : 48;
-        final minSize = ((footer + 18) / height).clamp(.17, .55);
+        final hasRouteAction = _tab == 1 && !_navigating;
+        final navActions = _tab == 2 && _session != null;
+        final hasPrimaryAction = hasRouteAction || navActions;
+        final minSize = ((footer + (hasPrimaryAction ? 100 : 18)) / height)
+            .clamp(.17, .55);
+        final half = math.max(.43, minSize + .04);
         final initialSize = _navigating
-            ? .26
+            ? .31
             : _tab == 0 && _selected == null && _results.isEmpty
             ? .21
             : .43;
         return DraggableScrollableSheet(
-          key: ValueKey((_tab, _navigating, _selected != null)),
+          key: ValueKey((
+            _tab,
+            _navigating,
+            _selected != null,
+            _tab == 0 && _results.isNotEmpty,
+          )),
+          controller: hasRouteAction ? _routeSheet : null,
           initialChildSize: math.max(initialSize, minSize),
+          snapSizes: [half],
           minChildSize: minSize,
           maxChildSize: height < 450 ? .66 : .78,
           snap: true,
@@ -1012,7 +1139,24 @@ class _MapHomeState extends State<MapHome> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 10),
+                      if (!_navigating && _tab >= 2)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Text(
+                            w(
+                              [
+                                'search',
+                                'directions',
+                                'nav',
+                                'saved',
+                                'profile',
+                              ][_tab],
+                            ),
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                        ),
                       if (_loading) const LinearProgressIndicator(),
                       if (_error != null)
                         ListTile(
@@ -1069,6 +1213,13 @@ class _MapHomeState extends State<MapHome> {
                     ],
                   ),
                 ),
+                if (hasPrimaryAction)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                    child: hasRouteAction
+                        ? _routeAction()
+                        : _navigationActions(_session!),
+                  ),
                 Padding(
                   padding: EdgeInsets.fromLTRB(
                     16,
@@ -1089,122 +1240,245 @@ class _MapHomeState extends State<MapHome> {
     );
   }
 
+  Future<void> _showLayers() => showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheetContext) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              w('layers'),
+              style: Theme.of(sheetContext).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final name in ['system', 'light', 'dark'])
+                  ChoiceChip(
+                    label: Text(w(name)),
+                    selected:
+                        (widget.prefs.getString('theme') ?? 'system') == name,
+                    onSelected: (selected) {
+                      if (!selected) return;
+                      Navigator.pop(sheetContext);
+                      unawaited(_preference('theme', name));
+                    },
+                  ),
+              ],
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(w('mapPoi')),
+              value: _showMapPois,
+              onChanged: (value) {
+                Navigator.pop(sheetContext);
+                _showMapPois = value;
+                unawaited(widget.prefs.setBool('mapPoi', value));
+                _syncStyle();
+              },
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  Widget _mapTool(IconData icon, String label, VoidCallback action) => Material(
+    color: Theme.of(context).colorScheme.surface,
+    elevation: 4,
+    borderRadius: BorderRadius.circular(15),
+    child: IconButton(icon: Icon(icon), tooltip: w(label), onPressed: action),
+  );
+
   Widget _top() {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     final session = _session;
-    final next = session?.progress.nextStep;
-    if (_navigating && next != null) {
-      final step = session!.progress.route.steps[next];
-      final icon = switch (session.instructionKey(step)) {
+    if (_navigating && session != null) {
+      final next = session.progress.nextStep;
+      final step = next == null ? null : session.progress.route.steps[next];
+      final key = step == null ? null : session.instructionKey(step);
+      final icon = switch (key) {
         'right' => Icons.turn_right,
         'left' => Icons.turn_left,
         'uturn' => Icons.u_turn_left,
         'destinationAhead' => Icons.flag_outlined,
         _ => Icons.navigation,
       };
-      return Card(
-        color: const Color(0xff2563eb),
-        child: ListTile(
-          textColor: Colors.white,
-          iconColor: Colors.white,
-          leading: Icon(icon),
-          title: Text(session.instruction(step)),
-          subtitle: Text(
-            [
-              _distance(session.progress.maneuverMeters),
-              if (step.street?.isNotEmpty ?? false) step.street!,
-              if (session.instructionKey(step) == null &&
-                  session.progress.route.language != w.language)
-                session.progress.route.language.toUpperCase(),
-            ].join(' · '),
+      return Material(
+        color: const Color(0xff172747),
+        elevation: 8,
+        borderRadius: BorderRadius.circular(23),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: const Color(0xff2563eb),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Icon(icon, color: Colors.white, size: 32),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _distance(session.progress.maneuverMeters),
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      step == null
+                          ? w(session.status)
+                          : session.instruction(step),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (step != null && (step.street?.isNotEmpty ?? false))
+                      Text(
+                        step.street!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Color(0xffc0cfe9)),
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       );
     }
-    return Card(
-      margin: EdgeInsets.zero,
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Material(
+          color: colors.surface,
+          elevation: 4,
+          borderRadius: BorderRadius.circular(19),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+            child: Row(
               children: [
-                Icon(
-                  Icons.explore,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'KUNDE Maps',
-                  style: Theme.of(context).textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w800),
-                ),
-              ],
-            ),
-            if (_picking) Text(w('tap')),
-            if (_tab == 0) ...[
-              const SizedBox(height: 6),
-              TextField(
-                controller: _query,
-                maxLength: 100,
-                onChanged: _search,
-                decoration: InputDecoration(
-                  counterText: '',
-                  prefixIcon: const Icon(Icons.search),
-                  hintText: w(
-                    _endpoint == null
-                        ? 'hint'
-                        : _endpoint == 0
-                        ? 'origin'
-                        : 'destination',
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0xff2563eb),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  suffixIcon: IconButton(
-                    tooltip: w('close'),
-                    icon: const Icon(Icons.close),
-                    onPressed: () {
-                      if (_endpoint != null) {
-                        _tabTo(1);
-                      } else {
-                        _query.clear();
-                        _search('');
-                      }
-                    },
+                  child: const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Icon(Icons.explore, color: Colors.white, size: 20),
                   ),
                 ),
-              ),
-              if (_endpoint == null)
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: ActionChip(
-                          label: Text(w('near')),
-                          onPressed: () => _nearby(null, fromDevice: true),
+                const SizedBox(width: 9),
+                if (_tab != 0)
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      child: Text(
+                        _picking ? w('tap') : 'KUNDE Maps',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
-                      for (final category in _categories)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: ChoiceChip(
-                            label: Text(w(category)),
-                            selected: _category == category,
-                            onSelected: (selected) =>
-                                _nearby(selected ? category : null),
-                          ),
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: TextField(
+                      controller: _query,
+                      maxLength: 100,
+                      onChanged: _search,
+                      decoration: InputDecoration(
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 10,
                         ),
-                    ],
+                        border: InputBorder.none,
+                        counterText: '',
+                        hintText: w(
+                          _endpoint == null
+                              ? 'hint'
+                              : _endpoint == 0
+                              ? 'origin'
+                              : 'destination',
+                        ),
+                        suffixIcon: IconButton(
+                          tooltip: w('close'),
+                          icon: const Icon(Icons.close),
+                          onPressed: () {
+                            if (_endpoint != null) {
+                              _tabTo(1);
+                            } else {
+                              _query.clear();
+                              _search('');
+                            }
+                          },
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-            ],
-          ],
+                if (_picking)
+                  IconButton(
+                    tooltip: w('close'),
+                    onPressed: () => _tabTo(1),
+                    icon: const Icon(Icons.close),
+                  ),
+              ],
+            ),
+          ),
         ),
-      ),
+        if (_tab == 0 &&
+            _endpoint == null &&
+            MediaQuery.viewInsetsOf(context).bottom == 0) ...[
+          const SizedBox(height: 7),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                ActionChip(
+                  backgroundColor: colors.surface,
+                  avatar: Icon(
+                    Icons.near_me_outlined,
+                    size: 17,
+                    color: colors.primary,
+                  ),
+                  label: Text(w('near')),
+                  onPressed: () => _nearby(null, fromDevice: true),
+                ),
+                for (final category in _categories)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 7),
+                    child: ChoiceChip(
+                      backgroundColor: colors.surface,
+                      label: Text(w(category)),
+                      selected: _category == category,
+                      onSelected: (selected) =>
+                          _nearby(selected ? category : null),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -1223,11 +1497,7 @@ class _MapHomeState extends State<MapHome> {
                     attributionEnabled: false,
                     dragEnabled: false,
                     featureTapsTriggersMapClick: _picking,
-                    compassViewMargins: math.Point(
-                      12,
-                      MediaQuery.paddingOf(context).top +
-                          (_tab == 0 ? 170 : 92),
-                    ),
+                    compassEnabled: false,
                     onMapCreated: (controller) {
                       _map = controller;
                       controller.onCircleTapped.add((circle) {
@@ -1305,35 +1575,56 @@ class _MapHomeState extends State<MapHome> {
                 ),
               ),
             ),
-          Positioned(
-            right: 12,
-            top: MediaQuery.sizeOf(context).height * .32,
-            child: FloatingActionButton.small(
-              tooltip: w('locate'),
-              onPressed: () {
-                final session = _session;
-                if (session != null && session.active) {
-                  session.follow = true;
-                  if (_gps != null) unawaited(_move(_gps!, 16));
-                } else {
-                  unawaited(_locate());
-                }
-              },
-              child: const Icon(Icons.my_location),
+          if (MediaQuery.viewInsetsOf(context).bottom == 0 && !_picking)
+            Positioned(
+              right: 12,
+              top: math.max(
+                MediaQuery.paddingOf(context).top + (_tab == 0 ? 120 : 68),
+                MediaQuery.sizeOf(context).height * .26,
+              ),
+              child: Column(
+                children: [
+                  if (!_navigating) ...[
+                    _mapTool(Icons.layers_outlined, 'layers', _showLayers),
+                    const SizedBox(height: 8),
+                    _mapTool(Icons.explore_outlined, 'north', () {
+                      if (_map case final controller?) {
+                        unawaited(
+                          controller.animateCamera(
+                            map.CameraUpdate.bearingTo(0),
+                          ),
+                        );
+                      }
+                    }),
+                    const SizedBox(height: 8),
+                  ],
+                  _mapTool(Icons.my_location, 'locate', () {
+                    final session = _session;
+                    if (session != null && session.active) {
+                      session.follow = true;
+                      if (_gps != null) unawaited(_move(_gps!, 16));
+                    } else {
+                      unawaited(_locate());
+                    }
+                  }),
+                ],
+              ),
             ),
-          ),
           if (_picking)
             Positioned(bottom: 0, left: 0, child: Card(child: _attribution())),
           _sheet(),
         ],
       ),
-      bottomNavigationBar: _navigating
+      bottomNavigationBar:
+          _navigating || MediaQuery.viewInsetsOf(context).bottom > 0
           ? null
           : NavigationBar(
+              height: 62,
+              elevation: 6,
+              backgroundColor: Theme.of(context).colorScheme.surface,
               selectedIndex: _tab,
               onDestinationSelected: _tabTo,
-              labelBehavior:
-                  NavigationDestinationLabelBehavior.onlyShowSelected,
+              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
               destinations: [
                 for (final (key, icon) in [
                   ('search', Icons.search),
@@ -1354,6 +1645,7 @@ class _MapHomeState extends State<MapHome> {
     _mapTimeout?.cancel();
     _session?.dispose();
     _query.dispose();
+    _routeSheet.dispose();
     _http.close();
     super.dispose();
   }

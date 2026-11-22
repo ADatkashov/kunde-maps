@@ -8,8 +8,11 @@ import 'package:maps/core/platform_api.dart';
 import 'package:maps/features/map_style.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'route_journey.dart';
+
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  routeJourney(binding);
 
   testWidgets('native MapLibre renders roads and a live DEV route', (
     tester,

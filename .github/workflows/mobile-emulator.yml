@@ -16,8 +16,16 @@ concurrency:
 
 jobs:
   dev-smoke:
+    name: Android ${{ matrix.size }} · ${{ matrix.locale }} · ${{ matrix.theme }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {size: 360x800, locale: ru, theme: light}
+          - {size: 390x844, locale: kk, theme: dark}
+          - {size: 412x915, locale: en, theme: light}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-java@v5
@@ -43,4 +51,13 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          script: cd apps/mobile && flutter test -d emulator-5554 integration_test/dev_smoke_test.dart --no-pub
+          script: |
+            adb shell wm size ${{ matrix.size }}
+            adb shell wm density 160
+            cd apps/mobile && flutter drive -d emulator-5554 --no-pub --driver=integration_test/screenshot_driver.dart --target=integration_test/dev_smoke_test.dart --dart-define=KUNDE_TEST_SCREENSHOTS=true --dart-define=KUNDE_TEST_LOCALE=${{ matrix.locale }} --dart-define=KUNDE_TEST_THEME=${{ matrix.theme }}
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: phase61-android-${{ matrix.size }}-${{ matrix.locale }}-${{ matrix.theme }}
+          path: apps/mobile/build/phase61-screenshots/
+          if-no-files-found: warn
