@@ -14,15 +14,17 @@ jobs:
         run: |
           docker build -f infrastructure/maps/Dockerfile -t kunde-maps-browser:ci .
           docker run -d --name kunde-maps-browser -p 127.0.0.1:18080:80 kunde-maps-browser:ci
+          # Second instance whose CSP allows exactly the hosts the mocked UI scenarios talk to
+          docker run -d --name kunde-maps-browser-ui -e MAPS_TILE_URL=https://tiles.test/k.pmtiles -e MAPS_SEARCH_URL=https://search.test -p 127.0.0.1:18081:80 kunde-maps-browser:ci
       - name: Chromium smoke in supported Playwright container
         run: |
           docker run --rm --network host \
             -v "$PWD:/work" -w /work \
             mcr.microsoft.com/playwright:v1.58.2-noble \
-            bash -lc 'npm install --no-save --no-package-lock playwright@1.58.2 && node scripts/test-map-chromium.js && node scripts/test-search-ui.js'
+            bash -lc 'npm install --no-save --no-package-lock playwright@1.58.2 && node scripts/test-map-chromium.js && WEB_URL=http://127.0.0.1:18081 node scripts/test-search-ui.js'
       - name: Container logs
         if: always()
         run: docker logs kunde-maps-browser || true
       - name: Cleanup
         if: always()
-        run: docker rm -f kunde-maps-browser || true
+        run: docker rm -f kunde-maps-browser kunde-maps-browser-ui || true

@@ -66,7 +66,7 @@ jobs:
           set -eu
           sudo mkdir -p /srv/kunde-web
           sudo chown "$(id -u):$(id -g)" /srv/kunde-web
-          MAPS_TILE_URL=https://example.com/kazakhstan.pmtiles sh infrastructure/maps/40-configure-tiles.sh
+          CSP_FILE=/tmp/security-headers.inc MAPS_TILE_URL=https://example.com/kazakhstan.pmtiles sh infrastructure/maps/40-configure-tiles.sh
           python3 - <<'PY'
           import json
           with open('/srv/kunde-web/config.json') as f:
@@ -76,7 +76,7 @@ jobs:
           assert 'searchUrl' not in data
           print('Runtime config OK')
           PY
-          MAPS_SEARCH_URL=https://search.example.com/ MAPS_TILE_URL=https://example.com/kazakhstan.pmtiles sh infrastructure/maps/40-configure-tiles.sh
+          MAPS_SEARCH_URL=https://search.example.com/ CSP_FILE=/tmp/security-headers.inc MAPS_TILE_URL=https://example.com/kazakhstan.pmtiles sh infrastructure/maps/40-configure-tiles.sh
           python3 - <<'PY'
           import json
           data=json.load(open('/srv/kunde-web/config.json'))
@@ -85,7 +85,7 @@ jobs:
           print('Runtime config with search URL OK')
           PY
           for bad in 'http://search.example.com' 'https://x.example.com/path"x' 'https://x.example.com/a?b=1' 'javascript:alert(1)'; do
-            if MAPS_SEARCH_URL="$bad" sh infrastructure/maps/40-configure-tiles.sh 2>/dev/null; then echo "accepted bad URL: $bad"; exit 1; fi
+            if CSP_FILE=/tmp/security-headers.inc MAPS_SEARCH_URL="$bad" sh infrastructure/maps/40-configure-tiles.sh 2>/dev/null; then echo "accepted bad URL: $bad"; exit 1; fi
           done
           echo "Rejected invalid MAPS_SEARCH_URL values"
           CSP_FILE=/tmp/security-headers.inc MAPS_SEARCH_URL=https://search.example.com MAPS_TILE_URL=https://tiles.example.com/k.pmtiles sh infrastructure/maps/40-configure-tiles.sh
