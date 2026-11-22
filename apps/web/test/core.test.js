@@ -123,6 +123,8 @@ test('kind labels are localized with a neutral fallback for unknown OSM keys', (
   assert.equal(core.kindLabel('city', 'ru'), 'Город');
   assert.equal(core.kindLabel('city', 'kk'), 'Қала');
   assert.equal(core.kindLabel('city', 'en'), 'City');
+  assert.equal(core.kindLabel('country', 'ru'), 'Страна');
+  assert.equal(core.kindLabel('country', 'en'), 'Country');
   assert.equal(core.kindLabel('weird_tag', 'en'), 'Place');
   assert.ok(core.zoomForKind('city') < core.zoomForKind('address'));
 });

@@ -57,6 +57,7 @@
   };
 
   const KINDS = {
+    country: ['Страна', 'Ел', 'Country'], district: ['Район', 'Аудан', 'District'], quarter: ['Квартал', 'Квартал', 'Quarter'],
     city: ['Город', 'Қала', 'City'], town: ['Город', 'Қала', 'Town'], village: ['Село', 'Ауыл', 'Village'],
     hamlet: ['Населённый пункт', 'Елді мекен', 'Hamlet'], state: ['Область', 'Облыс', 'Region'],
     suburb: ['Район', 'Аудан', 'District'], neighbourhood: ['Микрорайон', 'Шағын аудан', 'Neighbourhood'],

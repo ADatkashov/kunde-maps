@@ -45,9 +45,8 @@ def local_search(db):
     return lambda q: server.search(db, q, 10)
 
 
-def http_search(base, pause):
+def http_search(base):
     def run(q):
-        time.sleep(pause)
         url = base.rstrip("/") + "/v1/search?" + urllib.parse.urlencode({"q": q, "limit": 10})
         request = urllib.request.Request(url, headers={"User-Agent": "kunde-maps-relevance/1.0", "Accept": "application/json"})
         for attempt in range(4):
@@ -71,10 +70,12 @@ def main():
     parser.add_argument("--min-top1", type=float, default=0.9)
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
-    search = local_search(args.db) if args.db else http_search(args.url, args.pause)
+    search = local_search(args.db) if args.db else http_search(args.url)
 
     hits, rr, latencies, misses = 0, [], [], []
     for query, kind, lat, lon in CASES:
+        if args.url:
+            time.sleep(args.pause)  # rate-limit pacing, deliberately outside the timed region
         started = time.perf_counter()
         results = search(query)
         latencies.append((time.perf_counter() - started) * 1000)

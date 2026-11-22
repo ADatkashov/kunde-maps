@@ -167,3 +167,10 @@ Measured with `scripts/search-relevance.py` (36 real cities/country in RU/KK/EN/
 top-1 **0.417 (v1) -> 1.000 (v2)**, MRR 0.417 -> 1.000, local latency p50 4 ms / p95 10 ms. `build-search-index.yml` now fails
 (blocks publishing) when top-1 < 0.9 on the freshly built index. Limits: typo tolerance covers a missing/extra last letter only;
 no street-level geocoding by house number, no admin hierarchy in results ("Almaty, Kazakhstan" style context) yet.
+
+### Live verification of index v2 (2026-11-22)
+Index built by Actions run 44992519201 from `kazakhstan-261120.osm.pbf` (1,451,793 places; the 'latest' link was broken that day, see
+`scripts/ci/fetch-osm-extract.sh`), published to R2 + GitHub Release, switched on Render DEV. Live `scripts/search-relevance.py`: top-1
+1.000 / MRR 1.000 on 36 cases. Server-side metrics during the run: 105 searches, 0 5xx, 0 busy, mean handler time ~50 ms. One transient
+`503` was observed by a browser in the same window with **zero** 5xx counted by the app, i.e. it originated at the hosting proxy; the
+web client retries once, so users did not notice. Free-tier cold start (up to ~1 min) and rare proxy 503s remain known limits.
