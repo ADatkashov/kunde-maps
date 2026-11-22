@@ -39,7 +39,7 @@ jobs:
           # Places gate: every category populated, Almaty has real places (prints category counts and contact-data coverage).
           python scripts/check-places-index.py /tmp/kunde-osm/kazakhstan-search.sqlite3
           sha256sum /tmp/kunde-osm/kazakhstan-search.sqlite3 > /tmp/kunde-osm/index.sha256
-          printf 'Source: Geofabrik Kazakhstan OSM extract (ODbL)\nSource URL: %s\nIndex schema: 2\n' "$(cat /tmp/kunde-osm/SOURCE_URL)" > /tmp/kunde-osm/PROVENANCE.txt
+          printf 'Source: Geofabrik Kazakhstan OSM extract (ODbL)\nSource URL: %s\nIndex schema: 3 (places, categories, contacts, R-tree)\nLicense: ODbL 1.0 - Derivative Database of OpenStreetMap data; (c) OpenStreetMap contributors; share-alike applies to this published index\n' "$(cat /tmp/kunde-osm/SOURCE_URL)" > /tmp/kunde-osm/PROVENANCE.txt
           date -u '+Built UTC: %Y-%m-%dT%H:%M:%SZ' >> /tmp/kunde-osm/PROVENANCE.txt
           cat /tmp/kunde-osm/source.sha256 >> /tmp/kunde-osm/PROVENANCE.txt
       - name: Save the verified extract for future builds

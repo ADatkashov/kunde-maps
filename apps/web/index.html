@@ -25,21 +25,39 @@ try { var t = localStorage.getItem('kunde-theme'); if (t === 'dark' || t === 'li
       <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
     </button>
   </form>
+  <div id="chips" class="chips" role="group" aria-label="Категории мест"></div>
   <section id="sheet" class="sheet" aria-label="Результаты" hidden>
     <button id="sheet-handle" class="sheet-handle" type="button" aria-expanded="true" aria-label="Развернуть или свернуть панель"><span></span></button>
     <div id="search-state" class="state" role="status" aria-live="polite" hidden></div>
     <ul id="search-results" class="results" role="listbox" aria-label="Результаты" hidden></ul>
+    <div id="places-panel" class="panel-block" hidden>
+      <div class="panel-head"><h2 id="places-title"></h2><button id="places-clear" class="btn small" type="button"></button></div>
+      <div id="places-state" class="state" role="status" aria-live="polite" hidden></div>
+      <ul id="places-list" class="results" aria-label="Места"></ul>
+    </div>
+    <div id="favorites-panel" class="panel-block" hidden>
+      <div class="panel-head"><h2 id="favorites-title"></h2><button id="favorites-close" class="icon-button plain" type="button">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+      <p id="favorites-note" class="muted"></p>
+      <ul id="favorites-list" class="results" aria-label="Сохранённые"></ul>
+      <p id="favorites-empty" class="muted empty" hidden></p>
+    </div>
     <article id="selection" class="place-card" hidden>
       <div class="place-head">
-        <div class="place-title"><h2 id="selection-title">Выбранная точка</h2><p id="selection-kind" class="place-kind"></p></div>
+        <div class="place-title"><p id="selection-chip" class="cat-chip" hidden></p><h2 id="selection-title">Выбранная точка</h2><p id="selection-kind" class="place-kind"></p></div>
         <button id="selection-close" class="icon-button plain" type="button" aria-label="Закрыть">
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
         </button>
       </div>
+      <p id="selection-open" class="open-badge" hidden></p>
+      <dl id="selection-details" class="details"></dl>
+      <details id="selection-hours" class="hours" hidden><summary></summary><table><tbody></tbody></table></details>
       <p class="place-coords"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.3"/></svg><span id="selection-coords"></span></p>
       <div class="place-actions">
-        <button id="share-place" class="btn primary" type="button">Поделиться</button>
-        <button id="copy-place" class="btn" type="button">Копировать координаты</button>
+        <a id="route-place" class="btn primary" target="_blank" rel="noopener noreferrer"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M19 5h-8M19 5v8"/></svg><span></span></a>
+        <button id="save-place" class="btn" type="button" aria-pressed="false"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.8 6.8 19.6l1-5.8-4.3-4.1 5.9-.9L12 3.5Z"/></svg><span></span></button>
+        <button id="share-place" class="btn" type="button"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4m0 0L8 8m4-4 4 4M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg><span></span></button>
+        <button id="copy-place" class="btn subtle" type="button"></button>
       </div>
     </article>
   </section>
@@ -49,6 +67,9 @@ try { var t = localStorage.getItem('kunde-theme'); if (t === 'dark' || t === 'li
   <button id="language" class="icon-button" type="button" aria-label="Язык подписей" title="Язык подписей">RU</button>
   <button id="theme" class="icon-button" type="button" aria-label="Сменить тему" title="Сменить тему">
     <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
+  </button>
+  <button id="favorites-btn" class="icon-button" type="button" aria-label="Сохранённые" title="Сохранённые" aria-pressed="false">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.8 6.8 19.6l1-5.8-4.3-4.1 5.9-.9L12 3.5Z"/></svg>
   </button>
   <button id="locate" class="icon-button" type="button" aria-label="Моё местоположение" title="Моё местоположение">
     <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="7.5"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>

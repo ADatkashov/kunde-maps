@@ -249,6 +249,24 @@ test('opening hours: overnight ranges, several ranges per day and rule overrides
   assert.equal(core.openStatus('Mo-Fr 09:00-24:00', at('2026-11-23T18:30:00Z')).until, '00:00');
 });
 
+test('opening hours: real-world variants (PH with same hours, spaces, comma between rules) are understood', () => {
+  const mon = at('2026-11-23T05:00:00Z'); // Mon 10:00 Almaty
+  assert.equal(core.openStatus('Mo-Su,PH 09:00-18:00', mon).until, '18:00');
+  assert.equal(core.openStatus('PH,Mo-Su 09:00-18:00', mon).until, '18:00');
+  assert.equal(core.openStatus('Mo-Fr 09:00 - 18:00', mon).until, '18:00');
+  assert.equal(core.openStatus('Mo-Fr 09:00-18:00, Sa-Su 10:00-14:00', mon).until, '18:00');
+  assert.equal(core.openStatus('Mo-Fr 09:00-18:00, Sa-Su 10:00-14:00', at('2026-11-22T06:00:00Z')).until, '14:00'); // Sun 11:00
+  assert.equal(core.openStatus('Mo, We-Fr 09:00-18:00; Sa, Su 10:00-14:00', mon).until, '18:00');
+  assert.equal(core.openStatus('Mo, We-Fr 09:00-18:00; Sa, Su 10:00-14:00', at('2026-11-24T05:00:00Z')).state, 'closed'); // Tue
+  assert.equal(core.openStatus('Mo-Th 11:00-24:00; Fr-Sa 11:00-01:00; Su 12:00-24:00', at('2026-11-27T19:30:00Z')).until, '01:00'); // Sat 00:30 spill
+});
+
+test('opening hours: holiday rules that change the schedule stay unknown', () => {
+  for (const text of ['Mo-Su 09:00-18:00; PH off', 'PH off', 'Mo-Fr 09:00-18:00; PH 10:00-14:00', 'Mo-Su,PH off']) {
+    assert.equal(core.parseOpeningHours(text), null, text);
+  }
+});
+
 test('opening hours: anything not understood is unknown, never guessed', () => {
   for (const text of ['Mo-Fr 09:00-18:00; PH off', 'sunrise-sunset', 'Mo-Fr 09:00-18:00 "by appointment"', 'Jan-Mar Mo 09:00-10:00',
     'Mo[1] 09:00-10:00', 'Mo-Fr 09:00-18:00+', 'week 1-10 Mo 09:00-10:00', 'garbage', '', '   ', null, undefined, 42,
@@ -288,6 +306,13 @@ test('favorites: toggle, key by osm id or coordinates, cap and validation of per
   const restored = core.parseFavorites(JSON.stringify(big.slice(0, 3)));
   assert.deepEqual(restored.map(x => x.id), ['n250', 'n249', 'n248']);
   for (const junk of ['not json', '{}', '[1,2,null]', '[{"category":"cafe"}]', null, '[{"lat":1,"lon":2,"category":"weapons"}]']) assert.deepEqual(core.parseFavorites(junk), [], String(junk));
+  // plain points and search hits (no category) are valid favorites too
+  const point = {id: null, name: 'Алматы', nameRu: null, nameKk: null, nameEn: 'Almaty', category: null, subtype: 'city', lat: 43.2, lon: 76.9, address: null};
+  const toggled = core.toggleFavorite([], point);
+  assert.deepEqual(core.parseFavorites(JSON.stringify(toggled.list)), toggled.list);
+  assert.equal(core.favoriteTitle(point, 'en'), 'Almaty');
+  assert.equal(core.favoriteTitle({...point, name: null, nameEn: null}, 'ru'), '43.20000, 76.90000', 'coordinates, never an invented name');
+  assert.equal(core.favoriteTitle({...point, name: null, nameEn: null, category: 'parking', subtype: 'parking'}, 'ru'), 'Парковка');
 });
 
 test('every new UI string exists in all languages', () => {

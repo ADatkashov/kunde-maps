@@ -25,3 +25,8 @@ Phase 2 (this update)
 - C. Cartographic style v2 (generated light/dark styles, see `docs/design/design-system.md`): full OpenMapTiles layer use, road hierarchy
   with casings, parks/water/landcover/ice/rock, peaks with elevation, RU/KK/EN labels, POI dots, house numbers. CI: generator drift,
   schema/field check against the real archive, official spec validator, mutation-checked.
+- Phase 3 (Places & POI, live on DEV): categories from OSM tags (17), index schema v3 (77,482 places, real contact coverage 14-24%), Places API,
+  category chips, viewport/nearby search, clustered markers, place cards with real data (hours interpreter 97% of real strings), saved places,
+  share links by OSM id. 36 browser scenarios, 29 web unit tests, 68 Search API tests. See `docs/places-api.md`, ADR 0002.
+- Known limits: directions are an external OSM link; POIs are colored dots (no icon sprite); contact data is as complete as OSM (mostly absent);
+  places need zoom >= 11; no photos/reviews/ratings (no licensed source); saved places do not sync across devices.

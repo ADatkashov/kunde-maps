@@ -461,14 +461,20 @@
     if (source === '24/7') return {days: Array.from({length: 7}, () => [[0, 1440]])};
     const days = Array.from({length: 7}, () => []);
     const dayToken = '(?:Mo|Tu|We|Th|Fr|Sa|Su)';
-    const rule = new RegExp('^(?:(' + dayToken + '(?:-' + dayToken + ')?(?:,' + dayToken + '(?:-' + dayToken + ')?)*)\\s+)?(off|closed|\\d{1,2}:\\d{2}-\\d{1,2}:\\d{2}(?:,\\s*\\d{1,2}:\\d{2}-\\d{1,2}:\\d{2})*)$', 'i');
-    for (const part of source.split(';').map(x => x.trim()).filter(Boolean)) {
+    const span = '\\d{1,2}:\\d{2}\\s*-\\s*\\d{1,2}:\\d{2}';
+    const rule = new RegExp('^(?:(' + dayToken + '(?:-' + dayToken + ')?(?:\\s*,\\s*' + dayToken + '(?:-' + dayToken + ')?)*)\\s+)?(off|closed|' + span + '(?:\\s*,\\s*' + span + ')*)$', 'i');
+    // Tolerated, unambiguous variants seen in real OSM data:
+    //  - "Mo-Fr 09:00-18:00, Sa 10:00-14:00": a comma between a time and a weekday starts a new rule;
+    //  - "Mo-Su,PH 09:00-18:00": public holidays with the same hours add nothing to the weekday schedule.
+    // "PH off", holiday-only rules, months, sunrise etc. remain unsupported (-> unknown).
+    const normalized = source.replace(/(\d{1,2}:\d{2})\s*,\s*(?=(?:Mo|Tu|We|Th|Fr|Sa|Su)\b)/g, '$1; ').replace(/,\s*PH(?=\s+\d)/g, '').replace(/\bPH\s*,\s*(?=(?:Mo|Tu|We|Th|Fr|Sa|Su)\b)/g, '');
+    for (const part of normalized.split(';').map(x => x.trim()).filter(Boolean)) {
       const match = rule.exec(part);
       if (!match) return null;
       const selected = new Set();
       if (!match[1]) DAY_CODES.forEach((_, i) => selected.add(i));
       else {
-        for (const piece of match[1].split(',')) {
+        for (const piece of match[1].split(/\s*,\s*/)) {
           const [from, to] = piece.split('-').map(x => DAY_CODES.findIndex(d => d.toLowerCase() === x.toLowerCase()));
           if (to === undefined) selected.add(from);
           else for (let i = from; ; i = (i + 1) % 7) { selected.add(i); if (i === to) break; }
@@ -477,7 +483,7 @@
       let ranges = [];
       if (!/^(off|closed)$/i.test(match[2])) {
         for (const r of match[2].split(',')) {
-          const m = /^\s*(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})\s*$/.exec(r);
+          const m = /^\s*(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\s*$/.exec(r);
           const sh = Number(m[1]), sm = Number(m[2]), eh = Number(m[3]), em = Number(m[4]);
           if (sm > 59 || em > 59 || sh > 23 || eh > 24 || (eh === 24 && em !== 0)) return null;
           const start = sh * 60 + sm;
@@ -555,12 +561,31 @@
       category: place.category, subtype: place.subtype, lat: place.lat, lon: place.lon, address: place.address};
     return {list: [snapshot, ...list].slice(0, FAVORITES_MAX), saved: true};
   }
+  /** Validate one persisted favorite (category may be null for plain points and search hits). */
+  function validFavorite(item) {
+    if (!item || typeof item !== 'object') return null;
+    const lat = Number(item.lat), lon = Number(item.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    if (item.category != null && item.category !== '' && !CATEGORIES_LIST.includes(item.category)) return null;
+    const text = (value, max) => (typeof value === 'string' && value.trim() ? value.slice(0, max) : null);
+    return {
+      id: typeof item.id === 'string' && PLACE_ID.test(item.id) ? item.id : null,
+      name: text(item.name, 200), nameRu: text(item.nameRu, 200), nameKk: text(item.nameKk, 200), nameEn: text(item.nameEn, 200),
+      category: item.category || null, subtype: typeof item.subtype === 'string' ? item.subtype.slice(0, 40) : '',
+      lat, lon, address: text(item.address, 300),
+    };
+  }
   /** Parse and validate persisted favorites; anything malformed is dropped. */
   function parseFavorites(json) {
     let raw;
     try { raw = JSON.parse(json || '[]'); } catch (_) { return []; }
-    if (!Array.isArray(raw)) return [];
-    return raw.slice(0, FAVORITES_MAX).map(item => validPoi({...item, name_ru: item?.nameRu, name_kk: item?.nameKk, name_en: item?.nameEn})).filter(Boolean);
+    return Array.isArray(raw) ? raw.slice(0, FAVORITES_MAX).map(validFavorite).filter(Boolean) : [];
+  }
+  /** Title of a favorite in the UI language; never invented (falls back to kind, then coordinates). */
+  function favoriteTitle(item, lang) {
+    const localized = lang === 'kk' ? item.nameKk : lang === 'ru' ? item.nameRu : lang === 'en' ? item.nameEn : null;
+    return localized || item.name || item.nameRu || item.nameKk || item.nameEn
+      || (item.category ? placeKindLabel(item, lang) : formatCoords(item.lat, item.lon));
   }
 
   return {
@@ -568,6 +593,6 @@
     formatCoords, parseConfigUrl, validPlace, SearchError, createSearchClient, parsePlaceHash, buildPlaceHash,
     CATEGORIES, CATEGORY_COLORS, CATEGORY_LABELS, PLACE_ID, categoryLabel, placeKindLabel, safeWebsite, telHref, validPoi, poiTitle,
     formatDistance, routeUrl, createPlacesClient, parseOpeningHours, openStatus, hoursTable, openLabel, WEEKDAY_LABELS,
-    favoriteKey, isFavorite, toggleFavorite, parseFavorites,
+    favoriteKey, isFavorite, toggleFavorite, parseFavorites, validFavorite, favoriteTitle,
   };
 });
