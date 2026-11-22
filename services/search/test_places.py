@@ -187,6 +187,13 @@ class PlacesApiTest(unittest.TestCase):
         for bad in ("abc", "n", "n1a", "x1", "n1' OR 1=1", "n" + "9" * 20, "../n10"):
             self.assertEqual(self.get("/v1/places/" + bad.replace(" ", "%20").replace("'", "%27"))[0], 400, bad)
 
+    def test_text_search_results_carry_place_id_and_category_for_v3(self):
+        status, body = self.get("/v1/search?q=%D0%9A%D0%BE%D1%84%D0%B5%D0%B9%D0%BD%D1%8F%20%D0%90%D0%BB%D1%8C%D1%84%D0%B0")
+        top = body["results"][0]
+        self.assertEqual((top["name"], top["place_id"], top["category"]), ("Кофейня Альфа", "n10", "cafe"))
+        city = self.get("/v1/search?q=%D0%90%D0%BB%D0%BC%D0%B0%D1%82%D1%8B")[1]["results"][0]
+        self.assertEqual((city["name"], city["place_id"], city["category"]), ("Алматы", "n1", None))
+
     def test_categories_endpoint(self):
         status, body = self.get("/v1/categories")
         ids = [c["id"] for c in body["categories"]]
