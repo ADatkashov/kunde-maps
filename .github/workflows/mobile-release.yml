@@ -53,6 +53,7 @@ jobs:
           trap 'rm -f "$KUNDE_ANDROID_KEYSTORE"' EXIT
           printf '%s' "$KEYSTORE_B64" | base64 -d > "$KUNDE_ANDROID_KEYSTORE"
           defines=()
+          if [[ "$DIST_ENV" == dev ]]; then defines=("--dart-define=KUNDE_DIAGNOSTICS=true"); fi
           if [[ "$DIST_ENV" == prod ]]; then
             for var in PROD_WEB PROD_SEARCH PROD_ROUTING PROD_TILES; do
               if [[ "${!var}" != https://* || "${!var}" == *-dev.onrender.com* ]]; then

@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'core/diagnostics.dart';
 import 'core/platform_api.dart';
 import 'core/strings.dart';
 import 'features/location.dart';
@@ -106,6 +107,7 @@ class _MapHomeState extends State<MapHome> {
   int? _endpoint;
   bool _picking = false;
   bool _loading = false;
+  bool _waking = false;
   late bool _showMapPois = widget.prefs.getBool('mapPoi') ?? true;
   bool _mapReady = false;
   bool _tileRenderReady = false;
@@ -140,6 +142,7 @@ class _MapHomeState extends State<MapHome> {
       }
     }
     unawaited(_loadCategories());
+    unawaited(_api.warmUp());
   }
 
   Future<void> _loadCategories() async {
@@ -308,7 +311,14 @@ class _MapHomeState extends State<MapHome> {
 
   Future<Place?> _locate() async {
     try {
-      if (!await requestLocation()) throw const ApiFailure('gps');
+      final access = await locationAccess();
+      diagnostics.set('gps', access.name);
+      if (access != GpsAccess.ok) {
+        if (mounted) {
+          _toast(w(access == GpsAccess.serviceOff ? 'gpsOff' : 'gpsDenied'));
+        }
+        return null;
+      }
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           timeLimit: Duration(seconds: 15),
@@ -316,12 +326,14 @@ class _MapHomeState extends State<MapHome> {
       );
       final point = Point.parse(position.latitude, position.longitude);
       if (!mounted) return null;
+      diagnostics.set('gps', 'fix±${position.accuracy.round()}m');
       setState(() => _gps = point);
       unawaited(_move(point, 15));
       _redraw();
       return _coordinate(point, w('locate'));
     } catch (_) {
-      if (mounted) _toast(w('gps'));
+      diagnostics.set('gps', 'no-fix');
+      if (mounted) _toast(w('gpsWeak'));
       return null;
     }
   }
@@ -354,8 +366,12 @@ class _MapHomeState extends State<MapHome> {
     final token = ++_request;
     setState(() {
       _loading = true;
+      _waking = false;
       _error = null;
+      _routes = [];
     });
+    _redraw();
+    diagnostics.setAll({'error': null, 'rendered': null, 'source': null});
     try {
       final routes = await _api.route(
         origin.point,
@@ -363,6 +379,12 @@ class _MapHomeState extends State<MapHome> {
         _mode,
         w.language,
         alternatives: true,
+        cancelled: () => !mounted || token != _request,
+        onSlow: () {
+          if (mounted && token == _request && !_waking) {
+            setState(() => _waking = true);
+          }
+        },
       );
       if (!mounted || token != _request) return;
       setState(() {
@@ -373,15 +395,66 @@ class _MapHomeState extends State<MapHome> {
       if (_routeSheet.isAttached) {
         _routeSheet.jumpTo(.43);
       }
-      unawaited(_fit(routes.first));
+      await _fit(routes.first);
+      unawaited(_verifyRoute(routes.first));
     } catch (error) {
       if (mounted && token == _request) {
         final code = _problem(error);
         debugPrint('KUNDE route: $code');
+        diagnostics.set('error', code);
         setState(() => _error = code);
       }
     } finally {
-      if (mounted && token == _request) setState(() => _loading = false);
+      if (mounted && token == _request) {
+        setState(() {
+          _loading = false;
+          _waking = false;
+        });
+      }
+    }
+  }
+
+  /// Proves the road line is on the map instead of assuming it: asks the
+  /// native map which features of the route layer it actually rendered. A
+  /// missed paint is repeated; a line that still is not rendered is reported.
+  Future<void> _verifyRoute(RoadRoute route) async {
+    for (var attempt = 0; attempt < 4; attempt++) {
+      await Future<void>.delayed(Duration(milliseconds: 600 + attempt * 600));
+      final controller = _map;
+      if (!mounted || controller == null || !identical(_route, route)) return;
+      if (!_mapReady) continue;
+      try {
+        final size = MediaQuery.sizeOf(context);
+        final scale = MediaQuery.devicePixelRatioOf(context);
+        final source = await controller.querySourceFeatures(
+          routeSourceId,
+          null,
+          null,
+        );
+        final rendered = await controller.queryRenderedFeaturesInRect(
+          Rect.fromLTWH(0, 0, size.width * scale, size.height * scale),
+          [primaryRouteLayerId],
+          null,
+        );
+        diagnostics.setAll({
+          'source': source.length,
+          'rendered': rendered.length,
+          'map': 'style+route',
+        });
+        if (rendered.isNotEmpty) {
+          if (_error == 'routeRender') setState(() => _error = null);
+          return;
+        }
+      } catch (error) {
+        diagnostics.set('map', 'query-failed');
+      }
+      _lastPaintedRoute = null;
+      _redraw();
+    }
+    if (mounted && identical(_route, route)) {
+      debugPrint('KUNDE route: line not rendered');
+      diagnostics.set('error', 'routeRender');
+      setState(() => _error = 'routeRender');
     }
   }
 
@@ -496,6 +569,7 @@ class _MapHomeState extends State<MapHome> {
             routeFeatures(_routes, chosen),
           );
           _lastPaintedRoute = chosen;
+          diagnostics.set('painted', chosen?.points.length ?? 0);
         }
         await controller.clearCircles();
         _pins.clear();
@@ -735,6 +809,18 @@ class _MapHomeState extends State<MapHome> {
       _redraw();
     }
   }
+
+  Widget _diagnosticsPanel() => ListenableBuilder(
+    listenable: diagnostics,
+    builder: (context, _) => Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Text(
+        'DEV · ${diagnostics.values.entries.map((e) => '${e.key}=${e.value}').join(' · ')}',
+        key: const ValueKey('diagnostics'),
+        style: Theme.of(context).textTheme.labelSmall,
+      ),
+    ),
+  );
 
   Widget _planner() {
     final route = _route;
@@ -1162,6 +1248,11 @@ class _MapHomeState extends State<MapHome> {
                           ),
                         ),
                       if (_loading) const LinearProgressIndicator(),
+                      if (_loading && _waking)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(w('wake')),
+                        ),
                       if (_error != null)
                         ListTile(
                           contentPadding: EdgeInsets.zero,
@@ -1208,6 +1299,7 @@ class _MapHomeState extends State<MapHome> {
                           ],
                         ),
                       if (_tab == 1) _planner(),
+                      if (_tab == 1 && showDiagnostics) _diagnosticsPanel(),
                       if (_tab == 2) _navigation(),
                       if (_tab == 3)
                         _favorites.isEmpty
@@ -1512,6 +1604,7 @@ class _MapHomeState extends State<MapHome> {
                       });
                     },
                     onStyleLoadedCallback: () {
+                      diagnostics.set('map', 'style-loaded');
                       _mapReady = true;
                       _lastPaintedRoute = null;
                       _redraw();

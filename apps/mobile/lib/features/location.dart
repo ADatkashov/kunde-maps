@@ -6,15 +6,24 @@ import 'package:geolocator/geolocator.dart';
 
 import '../core/strings.dart';
 
-Future<bool> requestLocation() async {
-  if (!await Geolocator.isLocationServiceEnabled()) return false;
+enum GpsAccess { ok, serviceOff, denied, deniedForever }
+
+/// Why the device position can or cannot be used, so the UI can tell the user
+/// whether to switch location on or to grant the permission.
+Future<GpsAccess> locationAccess() async {
+  if (!await Geolocator.isLocationServiceEnabled()) return GpsAccess.serviceOff;
   var permission = await Geolocator.checkPermission();
   if (permission == LocationPermission.denied) {
     permission = await Geolocator.requestPermission();
   }
-  return permission == LocationPermission.whileInUse ||
-      permission == LocationPermission.always;
+  return switch (permission) {
+    LocationPermission.whileInUse || LocationPermission.always => GpsAccess.ok,
+    LocationPermission.deniedForever => GpsAccess.deniedForever,
+    _ => GpsAccess.denied,
+  };
 }
+
+Future<bool> requestLocation() async => await locationAccess() == GpsAccess.ok;
 
 Future<bool> navigationNotificationsGranted() async {
   if (!Platform.isAndroid) return true;
