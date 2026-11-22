@@ -6,8 +6,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+# Cloudflare (r2.dev) answers the default "Python-urllib/x.y" User-Agent with HTTP 403 (error 1010); send our own.
+USER_AGENT = "kunde-maps-deployment-check/1.0 (+https://github.com/ADatkashov/kunde-maps)"
+
+
 def get(url, headers=None):
-    req = urllib.request.Request(url, headers=headers or {})
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **(headers or {})})
     try:
         with urllib.request.urlopen(req, timeout=12) as response:
             return response.status, dict(response.headers), response.read(1024 * 1024)
