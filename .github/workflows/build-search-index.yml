@@ -18,9 +18,18 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/kunde-osm
-          curl --fail --location --retry 3 --output /tmp/kunde-osm/kazakhstan.osm.pbf https://download.geofabrik.de/asia/kazakhstan-latest.osm.pbf
-          curl --fail --location --retry 3 --output /tmp/kunde-osm/kazakhstan.osm.pbf.md5 https://download.geofabrik.de/asia/kazakhstan-latest.osm.pbf.md5
+          base=https://download.geofabrik.de/asia
+          fetch() {  # fetch URL OUTPUT : diagnosable and retried on any transient error
+            curl --fail --location --silent --show-error --retry 5 --retry-all-errors --retry-delay 15 \
+              --write-out '%{http_code} %{size_download} bytes <- %{url_effective}\n' --output "$2" "$1"
+          }
+          echo "Redirect chain for the extract:"
+          curl --silent --head --location --write-out 'final: %{http_code} %{url_effective}\n' --output /dev/null "$base/kazakhstan-latest.osm.pbf" || true
+          fetch "$base/kazakhstan-latest.osm.pbf" /tmp/kunde-osm/kazakhstan.osm.pbf
+          fetch "$base/kazakhstan-latest.osm.pbf.md5" /tmp/kunde-osm/kazakhstan.osm.pbf.md5
           cd /tmp/kunde-osm
+          size="$(stat -c '%s' kazakhstan.osm.pbf)"
+          test "$size" -gt 50000000 || { echo "Extract is only $size bytes (not a PBF):"; head -c 400 kazakhstan.osm.pbf; exit 1; }
           # Geofabrik checksum may use its upstream filename.
           expected="$(awk '{print $1}' kazakhstan.osm.pbf.md5)"
           actual="$(md5sum kazakhstan.osm.pbf | awk '{print $1}')"
