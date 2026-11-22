@@ -26,6 +26,7 @@ jobs:
       SCOPE: ${{ inputs.scope }}
       ENGINES: ${{ inputs.engines }}
       ENGINE: ${{ matrix.engine }}
+      BENCH_LONG: ${{ inputs.scope == 'kazakhstan' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
       - name: Skip engines not requested
