@@ -85,7 +85,7 @@ async function planRoute(ctx) {
   await page.locator('#search-results [role=option]').first().click();
   await page.locator('#selection').waitFor();
   await page.locator('#route-place').click();
-  await page.locator('#route-start').waitFor({state: 'visible', timeout: 120000});
+  await page.locator('#route-start').waitFor({state: 'visible', timeout: 120000}).catch(async e => { throw new Error(e.message.split('\n')[0] + ' | route-state="' + (await page.locator('#route-state').innerText().catch(() => '?')).replace(/\s+/g, ' ') + '" replies=' + ctx.routeReplies.length); });
   const reply = ctx.routeReplies.at(-1).body;
   assert.ok(reply.geometry.coordinates.length >= 2 && reply.steps.length >= 2, 'real route has geometry and steps');
   assert.ok(reply.distance_m > 800 && reply.distance_m < 12000, 'route length ' + reply.distance_m);
@@ -245,6 +245,7 @@ async function regression(browser, config) {
     ['regression', () => regression(browser, config)]];
   try {
     for (const [name, fn] of steps) {
+      if (process.env.ONLY && !name.includes(process.env.ONLY)) continue;
       const t0 = Date.now();
       try { await fn(); log('ok   -', name, `(${Math.round((Date.now() - t0) / 1000)} s)`); }
       catch (error) { failed++; console.error('FAIL -', name, '\n      ', String(error.stack || error.message).split('\n').slice(0, 8).join('\n       ')); }
