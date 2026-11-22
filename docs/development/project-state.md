@@ -47,4 +47,11 @@ Phase 2 (this update)
   (only real tile heights), desktop sidebar composition. See `docs/design/design-system.md`, ADR 0005, `docs/design/traffic-architecture.md`.
   - Honest gaps: no traffic (no verified source), no voice search, "Add a place" is an explanatory dialog, no accounts/sync, weather/ratings/photos not shown. Physical Android GPS test still **open**.
   - Tests: 79 Node unit tests, 48 + 11 + 19 Chromium scenarios (mocked map/APIs) and a live DEV suite (real backend, simulated GPS).
+
+- **Phase 6 native mobile (PR #39)**: the signed Android DEV Release v0.6.0
+  (build 1) passed installation, map, search, place-card and GPS-fix checks
+  reported by the user on physical Android. Physical Android navigation
+  checks remain **NOT TESTED** and physical iPhone validation remains open.
+  See the [device test record and route checklist](../phase6-physical-android.md).
+
   - **Phase 5.5 shipped (PR #37, main `1b536b2`)**; Render DEV has autoDeploy off, so it was deployed manually (`dep-dc1f7r942hec73a6rrug`, existing free service, no new resources). Verified on the deployed DEV: `scripts/test-redesign-live.js` 8/8 (real tiles, Search/Places/Routing APIs, security headers, GPS simulated) and `scripts/test-navigation-dev.js` all scenarios (full trip with reroute and arrival, 4 viewports/themes/languages, Phase 1-4 regression). Screenshots: `docs/design/screenshots/after-*.png`. Physical Android GPS test: still open.
