@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Vendored libraries must match their recorded checksums, ship their licenses, and the page must not load third-party code."""
+"""Vendored libraries and self-hosted glyphs must match their recorded checksums, ship their licenses, and the page must not load third-party code."""
 import hashlib
 import re
 import sys
@@ -28,6 +28,21 @@ def main():
         text = (VENDOR / name).read_text(encoding="utf-8", errors="replace")
         if "Redistribution and use" not in text and "BSD" not in text:
             problems.append(f"{name}: does not look like a BSD license text")
+    fonts = WEB / "fonts"
+    font_sums = {}
+    for line in (fonts / "CHECKSUMS.sha256").read_text(encoding="utf-8").splitlines():
+        digest, _, name = line.partition("  ")
+        font_sums[name.strip()] = digest.strip()
+    on_disk = {p.relative_to(fonts).as_posix(): p for p in fonts.rglob("*.pbf")}
+    if set(on_disk) != set(font_sums):
+        problems.append(f"fonts: files and CHECKSUMS.sha256 differ: {sorted(set(on_disk) ^ set(font_sums))[:5]}")
+    for name, path in on_disk.items():
+        if name in font_sums and hashlib.sha256(path.read_bytes()).hexdigest() != font_sums[name]:
+            problems.append(f"fonts/{name}: checksum mismatch")
+    for stack in ("Open Sans Regular", "Open Sans Semibold", "Open Sans Italic", "Open Sans Bold"):
+        for rng in ("0-255", "1024-1279"):  # Latin and Cyrillic (RU + KK) are mandatory
+            if f"{stack}/{rng}.pbf" not in on_disk:
+                problems.append(f"fonts: missing {stack}/{rng}.pbf")
     html = (WEB / "index.html").read_text(encoding="utf-8")
     for match in re.finditer(r'<(?:script|link)\b[^>]*\b(?:src|href)="([^"]+)"', html):
         if re.match(r"^(https?:)?//", match.group(1)):

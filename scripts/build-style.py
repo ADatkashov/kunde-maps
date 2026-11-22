@@ -15,7 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = "kunde"
-GLYPHS = "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf"
+GLYPHS = "/fonts/{fontstack}/{range}.pbf"  # self-hosted (apps/web/fonts); the web app makes it absolute for workers
 F_REG, F_SEMI, F_BOLD, F_ITAL = ["Open Sans Regular"], ["Open Sans Semibold"], ["Open Sans Bold"], ["Open Sans Italic"]
 
 PALETTES = {

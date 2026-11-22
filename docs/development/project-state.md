@@ -31,3 +31,4 @@ Phase 2 (this update)
 - Known limits: directions are an external OSM link; POIs are colored dots (no icon sprite); contact data is as complete as OSM (mostly absent);
   places need zoom >= 11; no photos/reviews/ratings (no licensed source); saved places do not sync across devices.
 - Web hardening (ADR 0003): MapLibre/PMTiles vendored and checksummed, no inline scripts, strict CSP + security headers generated from the configured origins; verified on the real map with 0 violations. Remaining third-party host: public glyph server.
+- Glyphs self-hosted (Open Sans x4 stacks, ranges 0-1535 + punctuation, 1.6 MB): the page contacts no third-party host; CSP connect-src lists only own origin, tile host and Search API.

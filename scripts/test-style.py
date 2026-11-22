@@ -104,7 +104,7 @@ class StyleTest(unittest.TestCase):
             self.assertTrue(source["url"].startswith("pmtiles://http://localhost:8080/tiles/"), "the web app rewrites this known dev URL")
             self.assertIn("OpenStreetMap contributors", source["attribution"])
             self.assertIn("openmaptiles.org", source["attribution"])
-            self.assertTrue(style["glyphs"].startswith("https://"))
+            self.assertEqual(style["glyphs"], "/fonts/{fontstack}/{range}.pbf")
 
     def test_label_text_contrast_against_land_is_readable(self):
         # Labels carry halos, but their own colour must still read against the base land colour.
