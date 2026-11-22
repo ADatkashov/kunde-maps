@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const script = fs.readFileSync('apps/web/map.js', 'utf8');
+const coreScript = fs.readFileSync('apps/web/core.js', 'utf8');
 const style = JSON.parse(fs.readFileSync('apps/web/style.json', 'utf8'));
 
 async function scenario(tileStatus, contentRange) {
@@ -12,7 +13,7 @@ async function scenario(tileStatus, contentRange) {
   let resolvedTileUrl = '';
   const requests = [];
   const context = {
-    URL, console,
+    URL, URLSearchParams, console, setTimeout, clearTimeout,
     window: {
       location: {href: 'https://maps.example.test/', origin: 'https://maps.example.test'},
       pmtiles: {Protocol: class {constructor() {this.tile = () => {};}}},
@@ -46,7 +47,10 @@ async function scenario(tileStatus, contentRange) {
   };
   context.pmtiles = context.window.pmtiles;
   context.maplibregl = context.window.maplibregl;
-  vm.runInNewContext(script, context);
+  vm.createContext(context);
+  vm.runInContext(coreScript, context); // core.js (UMD) attaches KundeCore to the sandbox global
+  context.window.KundeCore = context.KundeCore;
+  vm.runInContext(script, context);
   for (let i = 0; i < 20; i++) await new Promise(resolve => setImmediate(resolve));
   return {status: status.textContent, mapCreated, resolvedTileUrl, requests};
 }

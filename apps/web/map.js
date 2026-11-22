@@ -3,6 +3,7 @@
   const core = window.KundeCore;
   const $ = id => document.getElementById(id);
   const status = $('status');
+  if (!core) { status.textContent = 'Карта не настроена: core.js не загружен'; return; }
   const root = document.documentElement;
 
   // ---- tiny helpers -------------------------------------------------------------------------
@@ -16,9 +17,9 @@
   // sticky messages (errors) stay; transient confirmations fade out.
   function setStatus(text, sticky) {
     status.textContent = text;
-    status.classList.remove('quiet');
+    status.classList?.remove('quiet');
     clearTimeout(statusTimer);
-    if (!sticky) statusTimer = setTimeout(() => status.classList.add('quiet'), 3500);
+    if (!sticky) statusTimer = setTimeout(() => status.classList?.add('quiet'), 3500);
   }
 
   try {
