@@ -1,0 +1,73 @@
+name: Build Kazakhstan routing graph
+# Builds the Valhalla tile extract from the Geofabrik extract, smoke-tests it with real routes and publishes it (immutable, SHA256 sidecar) to R2.
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "publish to R2 after the smoke test"
+        type: boolean
+        default: true
+concurrency:
+  group: build-routing-graph
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: /tmp/osm-cache
+          key: osm-extract-${{ github.run_id }}
+          restore-keys: osm-extract-
+      - name: Fetch OpenStreetMap extract
+        env:
+          OSM_CACHE_DIR: /tmp/osm-cache
+        run: sh scripts/ci/fetch-osm-extract.sh /tmp/kunde-osm
+      - name: Build graph
+        run: bash scripts/routing/build-graph.sh /tmp/kunde-osm/kazakhstan.osm.pbf /tmp/graph "$(cat /tmp/kunde-osm/SOURCE_URL)"
+      - name: Smoke test with real routes
+        run: bash scripts/routing/smoke-graph.sh /tmp/graph
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kazakhstan-routing-graph
+          path: |
+            /tmp/graph/valhalla-tiles.tar
+            /tmp/graph/valhalla-tiles.sha256
+            /tmp/graph/PROVENANCE.txt
+          retention-days: 14
+      - name: Publish immutable graph to R2
+        if: inputs.publish
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          test -n "$R2_ACCOUNT_ID" -a -n "$AWS_ACCESS_KEY_ID" -a -n "$AWS_SECRET_ACCESS_KEY"
+          python3 -m pip install 'awscli>=1.35,<2'
+          endpoint="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
+          key="routing/valhalla-kazakhstan-$RUN_ID"
+          aws --endpoint-url "$endpoint" s3 cp /tmp/graph/valhalla-tiles.tar "s3://kunde-maps-tiles/$key.tar" --content-type application/x-tar
+          aws --endpoint-url "$endpoint" s3 cp /tmp/graph/valhalla-tiles.sha256 "s3://kunde-maps-tiles/$key.sha256" --content-type text/plain
+          aws --endpoint-url "$endpoint" s3 cp /tmp/graph/PROVENANCE.txt "s3://kunde-maps-tiles/$key-PROVENANCE.txt" --content-type text/plain
+          remote=$(aws --endpoint-url "$endpoint" s3api head-object --bucket kunde-maps-tiles --key "$key.tar" --query ContentLength --output text)
+          test "$remote" = "$(stat -c '%s' /tmp/graph/valhalla-tiles.tar)"
+          echo "Published $key.tar ($remote bytes)" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Verify anonymous public download and checksum
+        if: inputs.publish
+        env:
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          base="https://pub-237f2a01acb04791aad25708c16f3d8a.r2.dev/routing/valhalla-kazakhstan-$RUN_ID"
+          curl -fsSL -A "kunde-maps-ci/1.0" -o /tmp/public.tar "$base.tar"
+          expected=$(curl -fsSL -A "kunde-maps-ci/1.0" "$base.sha256" | tr -d '[:space:]')
+          actual=$(sha256sum /tmp/public.tar | awk '{print $1}')
+          test "$expected" = "$actual"
+          echo "Public download verified: sha256 $actual" | tee -a "$GITHUB_STEP_SUMMARY"
