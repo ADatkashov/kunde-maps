@@ -6,6 +6,7 @@ set -uo pipefail
 engine=$1; pbf=$(readlink -f "$2"); out=$(readlink -f "$3"); mkdir -p "$out"
 here=$(cd "$(dirname "$0")" && pwd)
 work=$out/work; mkdir -p "$work"; cp "$pbf" "$work/data.osm.pbf"
+chmod -R a+rwX "$work"   # engine containers may run as a non-root user
 pbf_mb=$(du -m "$work/data.osm.pbf" | cut -f1)
 report=$out/results.md
 echo "### $engine ($(basename "$pbf"), ${pbf_mb} MB PBF, runner: $(nproc) CPU / $(free -g | awk '/Mem/{print $2}') GB RAM)" > "$report"
