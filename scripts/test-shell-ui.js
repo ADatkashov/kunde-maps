@@ -33,8 +33,8 @@ const MOCK_MAPLIBRE = `(function () {
 })();`;
 
 async function openPage(browser, {viewport = {width: 390, height: 844}, mobile = true, colorScheme = 'dark', geo, geoDenied = false, storage, places, reducedMotion = false, hash = '', waitLoaded = true,
-  initScript, lowEnd = false} = {}) {
-  const context = await browser.newContext({viewport, colorScheme, isMobile: mobile, hasTouch: mobile, reducedMotion: reducedMotion ? 'reduce' : 'no-preference',
+  initScript, lowEnd = false, bypassCSP = false} = {}) {   // bypassCSP only for tests that inject axe-core / a stylesheet; the app itself runs under the strict CSP
+  const context = await browser.newContext({bypassCSP, viewport, colorScheme, isMobile: mobile, hasTouch: mobile, reducedMotion: reducedMotion ? 'reduce' : 'no-preference',
     ...(geo ? {permissions: ['geolocation'], geolocation: geo} : {})});
   const page = await context.newPage();
   const errors = [], placeRequests = [], searchRequests = [], blocked = [];
@@ -472,7 +472,7 @@ const tests = {
     try { axeSource = require('fs').readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8'); }
     catch (_) { if (process.env.REQUIRE_AXE) throw new Error('axe-core is required (REQUIRE_AXE=1) but not installed'); console.log('     (skipped: axe-core not installed; npm i axe-core)'); return; }
     for (const colorScheme of ['dark', 'light']) {
-      const {page, context} = await openPage(browser, {colorScheme, storage: {'kunde-theme': colorScheme}, geo: {latitude: 43.2389, longitude: 76.9457}});
+      const {page, context} = await openPage(browser, {bypassCSP: true, colorScheme, storage: {'kunde-theme': colorScheme}, geo: {latitude: 43.2389, longitude: 76.9457}});
       await page.addScriptTag({content: axeSource});
       const audit = async label => {
         const result = await page.evaluate(() => axe.run(document, {runOnly: {type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}, rules: {'color-contrast': {enabled: true}}}));
@@ -492,7 +492,7 @@ const tests = {
     }
   },
   async 'accessibility smoke: names, roles, one current tab, modal dialog, switches expose state, 200% text does not break the layout'(browser) {
-    const {page, context} = await openPage(browser);
+    const {page, context} = await openPage(browser, {bypassCSP: true});
     const unnamed = await page.evaluate(() => [...document.querySelectorAll('button, [role=button], a[href], input, [role=switch]')].filter(e => e.offsetParent !== null || e.closest('.sheet')).filter(e => {
       const name = (e.getAttribute('aria-label') || e.textContent || e.getAttribute('title') || (e.labels && e.labels[0] && e.labels[0].textContent) || '').trim();
       return !name && getComputedStyle(e).display !== 'none' && !e.closest('[hidden]');
