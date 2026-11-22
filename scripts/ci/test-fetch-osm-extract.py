@@ -27,12 +27,15 @@ def serve(files, redirects):
     return s
 
 
-def run(files, redirects, **env):
+def run(files, redirects, cache_files=None, **env):
     s = serve(files, redirects)
     try:
-        with tempfile.TemporaryDirectory() as d:
-            e = {"PATH": "/usr/bin:/bin", "GEOFABRIK_BASE": f"http://127.0.0.1:{s.server_port}/asia", "TODAY": "2026-11-22", "MIN_BYTES": "10", **env}
+        with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as c:
+            for name, data in (cache_files or {}).items():
+                Path(c, name).write_bytes(data)
+            e = {"PATH": "/usr/bin:/bin", "GEOFABRIK_BASE": f"http://127.0.0.1:{s.server_port}/asia", "TODAY": "2026-11-22", "MIN_BYTES": "10", "OSM_CACHE_DIR": c, **env}
             r = subprocess.run(["sh", SCRIPT, d], capture_output=True, text=True, env=e, timeout=120)
+            r.cache = {p.name: p.read_bytes() for p in Path(c).iterdir()}
             src = Path(d, "SOURCE_URL")
             return r, (src.read_text().strip() if src.exists() else None), (Path(d, "kazakhstan.osm.pbf").read_bytes() if Path(d, "kazakhstan.osm.pbf").exists() else None)
     finally:
@@ -77,6 +80,27 @@ class FetchTest(unittest.TestCase):
         r, src, _ = run(files, {}, MIN_BYTES="100000")
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("not a PBF", r.stderr)
+
+    def test_successful_download_refreshes_the_cache(self):
+        files = {"/asia/kazakhstan-261121.osm.pbf": BODY, "/asia/kazakhstan-261121.osm.pbf.md5": md5(BODY)}
+        r, src, _ = run(files, {})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.cache["kazakhstan.osm.pbf"], BODY)
+        self.assertTrue(r.cache["SOURCE_URL"].decode().strip().endswith("kazakhstan-261121.osm.pbf"))
+
+    def test_falls_back_to_the_verified_cache_when_geofabrik_is_unreachable(self):
+        cached = {"kazakhstan.osm.pbf": BODY, "kazakhstan.osm.pbf.md5": md5(BODY), "SOURCE_URL": b"https://download.geofabrik.de/asia/kazakhstan-261120.osm.pbf\n"}
+        r, src, data = run({}, {}, cache_files=cached)
+        self.assertEqual((r.returncode, data), (0, BODY), r.stderr)
+        self.assertEqual(src, "cache of https://download.geofabrik.de/asia/kazakhstan-261120.osm.pbf")
+        self.assertIn("WARNING", r.stderr)
+        self.assertIn("HTTP 404", r.stdout, "diagnostics include the status code")
+
+    def test_a_corrupt_cache_is_never_used(self):
+        cached = {"kazakhstan.osm.pbf": BODY, "kazakhstan.osm.pbf.md5": b"0" * 32 + b"  x\n", "SOURCE_URL": b"x\n"}
+        r, src, data = run({}, {}, cache_files=cached)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIsNone(src)
 
     def test_nothing_available_fails_clearly(self):
         r, src, _ = run({}, {})
