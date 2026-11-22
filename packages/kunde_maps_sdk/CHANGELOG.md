@@ -1,7 +1,11 @@
 # Changelog
 
-Versions follow SemVer. Consumers pin a git tag `sdk-vX.Y.Z`. Public API additions are minor; removals or renames are major and are
+Versions follow SemVer. Consumers pin an immutable Git commit or a release tag `sdk-vX.Y.Z`. Public API additions are minor; removals or renames are major and are
 deprecated for one release first.
+
+## 0.2.1
+
+- Fix embedded address search in hosts that provide Flutter Material or WidgetsApp localizations.
 
 ## 0.2.0
 - Added `NavigationView` (route line, destination and position markers, follow camera with recenter) and `NavigationHud`
