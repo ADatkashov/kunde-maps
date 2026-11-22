@@ -22,6 +22,7 @@ body = json.load(open("/tmp/it.json"))
 assert code == 200, (name, code, body)
 km, minutes = body["distance_m"] / 1000, body["duration_s"] / 60
 print(f"{name}: {km:.1f} km, {minutes:.0f} min, {len(body['geometry']['coordinates'])} points, {len(body['steps'])} steps")
+print("  first steps:", json.dumps(body["steps"][:3], ensure_ascii=False))
 assert lo < km < hi, "distance out of the plausible range"
 assert body["steps"] and body["steps"][0]["instruction"], "no turn-by-turn steps"
 assert body["geometry"]["coordinates"][0][0] > 76 and body["note"] and "OpenStreetMap" in body["attribution"]
