@@ -158,26 +158,42 @@ const tests = {
     assert.match(routeRequests.at(-1), /from=43\.23640,76\.94570&to=43\.25000,76\.95000/);
     await context.close();
   },
-  async 'route: API errors become clear messages and only unknown failures offer the OpenStreetMap fallback'(browser) {
+  async 'route: API errors become clear messages; transient failures retry a bounded number of times, then offer Retry and Edit points - never an external map'(browser) {
     let reply = {status: 404, body: {error: 'no_route'}};
-    const {page, context} = await openPage(browser, {geo: {latitude: 43.2, longitude: 76.9}, routing: async () => reply});
+    const {page, context, routeRequests} = await openPage(browser, {geo: {latitude: 43.2, longitude: 76.9}, routing: async () => reply});
     await selectAlmaty(page);
     await page.locator('#route-place').click();
     await page.locator('#route-state').filter({hasText: 'Маршрут не найден'}).waitFor();
-    assert.equal(await page.locator('#route-external').isHidden(), true);
-    for (const [r, text, fallback] of [[{status: 400, body: {error: 'outside_coverage'}}, 'только по Казахстану', false],
-        [{status: 404, body: {error: 'no_road_near_point'}}, 'нет дороги', false],
-        [{status: 400, body: {error: 'route_too_long'}}, 'Слишком длинный', false],
-        [{status: 502, body: {error: 'routing_unavailable'}}, 'Не удалось построить маршрут', true],
-        [{status: 429, headers: {'retry-after': '7'}, body: {error: 'rate_limited'}}, 'через 7 с', false]]) {
+    assert.equal(await page.locator('#route-external').count(), 0, 'the external OpenStreetMap fallback no longer exists');
+    for (const [r, text] of [[{status: 400, body: {error: 'outside_coverage'}}, 'только по Казахстану'],
+        [{status: 404, body: {error: 'no_road_near_point'}}, 'нет дороги'],
+        [{status: 400, body: {error: 'route_too_long'}}, 'Слишком длинный'],
+        [{status: 429, headers: {'retry-after': '7'}, body: {error: 'rate_limited'}}, 'через 7 с']]) {
       reply = r;
       await page.locator('.mode[data-mode=bike]').click();
       await page.locator('#route-state').filter({hasText: text}).waitFor();
-      assert.equal(await page.locator('#route-external').isVisible(), fallback, text);
       await page.locator('.mode[data-mode=car]').click();
       await page.waitForTimeout(50);
     }
-    assert.match(await page.locator('#route-external').getAttribute('href'), /openstreetmap\.org\/directions\?from=&to=43\.2364/);
+    // a rate limit offers Retry
+    assert.equal(await page.locator('#route-state button').first().innerText(), 'Повторить');
+    // service down (cold start): 1 request + 2 automatic retries (4 s, 8 s), the UI stays usable and says what is happening
+    reply = {status: 502, headers: {'retry-after': '5'}, body: {error: 'routing_unavailable'}};
+    const before = routeRequests.length;
+    await page.locator('.mode[data-mode=bike]').click();
+    await page.locator('#route-state').filter({hasText: 'Повтор через 4 с'}).waitFor();
+    assert.equal(await page.locator('#route-close').isEnabled(), true, 'the panel is not blocked while waiting');
+    await page.locator('#route-state').filter({hasText: 'временно недоступен'}).waitFor({timeout: 25000});
+    assert.equal(routeRequests.length - before, 3, 'bounded: exactly 3 attempts, no endless loop');
+    const buttons = await page.locator('#route-state button').allInnerTexts();
+    assert.deepEqual(buttons, ['Повторить', 'Изменить точки']);
+    // Retry succeeds once the service is back
+    reply = ROUTE_REPLY;
+    await page.locator('#route-state button', {hasText: 'Повторить'}).click();
+    await page.locator('#route-summary').waitFor();
+    assert.equal(await page.locator('#route-start').isVisible(), true);
+    // nothing on the page points to another map
+    assert.equal(await page.locator('a[href*="openstreetmap.org/directions"], a[href*="google."], a[href*="yandex."], a[href*="2gis."]').count(), 0);
     await context.close();
   },
   async 'route: alternatives are listed, drawn as active/inactive lines and selectable; A and B pins follow the points'(browser) {
@@ -606,7 +622,7 @@ const tests = {
     await context.close();
   },
   async 'place card shows only real data: contacts, open now, hours table, safe links, actions'(browser) {
-    const {page, context} = await openPage(browser);
+    const {page, context} = await openPage(browser, {routing: async () => ROUTE_REPLY});
     await page.locator('.chip[data-category=cafe]').click();
     await page.locator('#places-list li').first().click();
     await page.locator('#selection').waitFor();
@@ -623,8 +639,9 @@ const tests = {
     assert.match(await page.locator('#selection-details').innerText(), /Абая 1/);
     assert.match(await page.locator('#selection-details').innerText(), /Альфа/);
     const route = page.locator('#route-place');
-    assert.equal(await route.getAttribute('href'), 'https://www.openstreetmap.org/directions?from=&to=43.24000%2C76.95000');
-    assert.equal(await route.getAttribute('target'), '_blank');
+    assert.equal(await route.getAttribute('href'), null, 'Route opens the in-app route panel, not another map');
+    assert.equal(await route.getAttribute('target'), null);
+    assert.equal(await route.evaluate(el => el.tagName), 'BUTTON');
     assert.equal(await page.locator('#save-place').isVisible(), true);
     assert.match(await page.evaluate(() => location.hash), /poi=n10/);
     const c = await calls(page);
@@ -648,7 +665,7 @@ const tests = {
     await context.close();
   },
   async 'missing data is simply absent: no empty rows, no hours, no badge, no invented name'(browser) {
-    const {page, context} = await openPage(browser);
+    const {page, context} = await openPage(browser, {routing: async () => ROUTE_REPLY});
     await page.locator('.chip[data-category=parking]').click();
     await page.locator('#places-list li').nth(2).click();
     await page.locator('#selection').waitFor();
@@ -657,6 +674,15 @@ const tests = {
     assert.equal(await page.locator('#selection-hours').isHidden(), true);
     assert.equal(await page.locator('#selection-open').isHidden(), true);
     assert.equal(await page.locator('#route-place').isVisible(), true, 'directions only need coordinates');
+    await context.close();
+  },
+  async 'without a configured routing API there is no Route button and no link to any external map'(browser) {
+    const {page, context} = await openPage(browser);
+    await page.locator('.chip[data-category=cafe]').click();
+    await page.locator('#places-list li').first().click();
+    await page.locator('#selection').waitFor();
+    assert.equal(await page.locator('#route-place').isHidden(), true);
+    assert.equal(await page.locator('a[href*="openstreetmap.org/directions"], a[href*="google."], a[href*="yandex."], a[href*="2gis."]').count(), 0);
     await context.close();
   },
   async 'hostile place data is inert: HTML in names/address, javascript: websites, junk phones'(browser) {

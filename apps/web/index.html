@@ -7,6 +7,7 @@
 <title>KUNDE Maps — Алматы</title>
 <link href="./vendor/maplibre-gl.css" rel="stylesheet">
 <link href="./ui.css" rel="stylesheet">
+<link href="./nav.css" rel="stylesheet">
 <script src="./theme-init.js"></script>
 </head>
 <body>
@@ -66,7 +67,10 @@
       <details id="route-steps-wrap" class="route-steps-wrap" hidden><summary id="route-steps-summary"></summary>
         <ol id="route-steps" class="route-steps" aria-label=""></ol></details>
       <p id="route-note" class="muted"></p>
-      <a id="route-external" class="btn subtle route-external" target="_blank" rel="noopener noreferrer" hidden></a>
+      <div id="route-start-row" class="route-start-row" hidden>
+        <button id="route-start" class="btn primary big" type="button"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m0 0-5-5m5 5-5 5"/></svg><span></span></button>
+        <p id="route-safety" class="muted route-safety"></p>
+      </div>
     </div>
     <article id="selection" class="place-card" hidden>
       <div class="place-head">
@@ -80,7 +84,7 @@
       <details id="selection-hours" class="hours" hidden><summary></summary><table><tbody></tbody></table></details>
       <p class="place-coords"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.3"/></svg><span id="selection-coords"></span></p>
       <div class="place-actions">
-        <a id="route-place" class="btn primary" target="_blank" rel="noopener noreferrer"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M19 5h-8M19 5v8"/></svg><span></span></a>
+        <button id="route-place" class="btn primary" type="button" hidden><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M19 5h-8M19 5v8"/></svg><span></span></button>
         <button id="save-place" class="btn" type="button" aria-pressed="false"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.8 6.8 19.6l1-5.8-4.3-4.1 5.9-.9L12 3.5Z"/></svg><span></span></button>
         <button id="share-place" class="btn" type="button"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4m0 0L8 8m4-4 4 4M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg><span></span></button>
         <button id="copy-place" class="btn subtle" type="button"></button>
@@ -88,6 +92,44 @@
     </article>
   </section>
 </div>
+
+<section id="nav" class="nav" hidden aria-label="Навигация">
+  <div class="nav-top">
+    <div id="nav-banner" class="nav-banner" role="group">
+      <div id="nav-icon" class="nav-icon" aria-hidden="true"></div>
+      <div class="nav-main">
+        <p id="nav-dist" class="nav-dist"></p>
+        <p id="nav-text" class="nav-text"></p>
+        <p id="nav-street" class="nav-street"></p>
+      </div>
+    </div>
+    <p id="nav-then" class="nav-then" hidden><span id="nav-then-icon" class="nav-then-icon" aria-hidden="true"></span><span id="nav-then-text"></span></p>
+    <div id="nav-alert" class="nav-alert" role="status" aria-live="polite" hidden>
+      <span id="nav-alert-spinner" class="spinner" aria-hidden="true"></span><span id="nav-alert-text" class="nav-alert-text"></span>
+      <button id="nav-retry" class="btn small" type="button" hidden></button>
+    </div>
+  </div>
+  <p id="nav-announce" class="sr-only" role="status" aria-live="polite"></p>
+  <button id="nav-recenter" class="nav-fab" type="button" hidden>
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="7.5"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg><span></span>
+  </button>
+  <section id="nav-steps-panel" class="nav-steps" hidden>
+    <ol id="nav-steps-list" class="nav-steps-list"></ol>
+  </section>
+  <div id="nav-bottom" class="nav-bottom">
+    <p id="nav-safety" class="nav-safety"></p>
+    <div class="nav-stats">
+      <div><strong id="nav-eta">--:--</strong><span id="nav-eta-label"></span></div>
+      <div><strong id="nav-left-time">--</strong><span id="nav-left-label"></span></div>
+      <div><strong id="nav-left-dist">--</strong><span id="nav-dist-label"></span></div>
+    </div>
+    <div class="nav-progress" aria-hidden="true"><span id="nav-progress-bar"></span></div>
+    <div class="nav-actions">
+      <button id="nav-steps-btn" class="btn" type="button" aria-expanded="false" aria-controls="nav-steps-panel"></button>
+      <button id="nav-end" class="btn danger" type="button"></button>
+    </div>
+  </div>
+</section>
 
 <div class="controls" role="group" aria-label="Управление картой">
   <button id="language" class="icon-button" type="button" aria-label="Язык подписей" title="Язык подписей">RU</button>
@@ -111,5 +153,7 @@
 <script src="./vendor/maplibre-gl.js"></script>
 <script src="./vendor/pmtiles.js"></script>
 <script src="./core.js"></script>
+<script src="./nav.js"></script>
+<script src="./nav-ui.js"></script>
 <script src="./map.js"></script>
 </body></html>

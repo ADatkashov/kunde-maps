@@ -9,6 +9,7 @@ on:
       - 'scripts/test-style.py'
       - 'scripts/validate-style.mjs'
       - 'scripts/fixtures/**'
+      - 'scripts/test-navigation-*.js'
       - '.github/workflows/web-regression.yml'
   pull_request:
     paths:
@@ -19,6 +20,7 @@ on:
       - 'scripts/test-style.py'
       - 'scripts/validate-style.mjs'
       - 'scripts/fixtures/**'
+      - 'scripts/test-navigation-*.js'
       - '.github/workflows/web-regression.yml'
 permissions:
   contents: read
@@ -31,9 +33,13 @@ jobs:
         run: |
           node --check apps/web/map.js
           node --check apps/web/core.js
+          node --check apps/web/nav.js
+          node --check apps/web/nav-ui.js
+          node --check scripts/test-navigation-ui.js
+          node --check scripts/test-navigation-dev.js
       - name: Vendored libraries are pinned, licensed and the page has no third-party or inline code
         run: python3 scripts/ci/check-vendor.py
-      - name: Unit-test web core (search client, i18n, hash links)
+      - name: Unit-test web core and the navigation core (search client, i18n, hash links, state machine, matching, rerouting, privacy)
         run: node --test apps/web/test/*.test.js
       - name: Map styles are generated, consistent with the tile schema, and spec-valid
         run: |
@@ -55,6 +61,8 @@ jobs:
           assert 'kunde' in style.get('sources', {})
           html = Path('apps/web/index.html').read_text()
           assert 'map.js' in html and 'core.js' in html and 'ui.css' in html
+          assert 'nav.js' in html and 'nav-ui.js' in html and 'nav.css' in html
+          assert 'openstreetmap.org/directions' not in html and 'route-external' not in html
           assert 'map-search' in html and 'search-results' in html
           print('Map static checks OK')
           PY

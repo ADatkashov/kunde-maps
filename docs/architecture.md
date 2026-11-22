@@ -19,6 +19,11 @@ Independent KUNDE Maps API, later consumed by KUNDE and external clients. API ve
 ## Decision gates
 Benchmark memory, storage and import times on actual Kazakhstan extracts before selecting hosting. Validate road restrictions and address search against curated ground-truth samples. Do not promise live traffic without sufficient GPS observations.
 
+## Navigation (Phase 5, see docs/navigation.md)
+Browser-side: `nav.js` (DOM-free core: state machine, local map matching, maneuver/ETA, rerouting controller) + `nav-ui.js` (HUD, follow camera). It reuses the
+Routing API and MapLibre; no new service. GPS never leaves the device except the reroute request to our own Routing API. Background navigation with a locked
+screen needs native clients (Phase 6) and is not claimed.
+
 ## Web client and search (see ADR 0001)
 Static web app (nginx) -> PMTiles on R2 for tiles; browser -> Search API (`/v1/search`) for places. Runtime config
 (`config.json`) is generated at container start from `MAPS_TILE_URL` and `MAPS_SEARCH_URL`. Decisions:

@@ -225,7 +225,8 @@ test('distance formatting and external route link', () => {
   assert.equal(core.formatDistance(1234, 'en'), '1.2 km');
   assert.equal(core.formatDistance(15500, 'kk'), '16 км');
   assert.equal(core.formatDistance(NaN, 'ru'), '');
-  assert.equal(core.routeUrl(43.23639, 76.94573), 'https://www.openstreetmap.org/directions?from=&to=43.23639%2C76.94573');
+  assert.equal(core.routeUrl, undefined, 'there is no external-map directions link any more');
+  for (const lang of ['ru', 'kk', 'en']) for (const [key, value] of Object.entries(core.STRINGS?.[lang] || {})) assert.ok(!/openstreetmap\.org\/directions/i.test(String(value)), key);
 });
 
 test('opening hours: open/closed/until/next, 24/7 and weekly wrap', () => {
