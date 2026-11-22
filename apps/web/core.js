@@ -317,19 +317,24 @@
   }
 
   /** Shareable place link parameters: #lat=..&lng=..&name=..[&poi=n123]. Returns null for anything invalid. */
+  const ROUTE_MODES = ['car', 'foot', 'bike'];
+
   function parsePlaceHash(hash) {
     const params = new URLSearchParams(String(hash || '').replace(/^#/, ''));
     const lat = Number(params.get('lat')), lng = Number(params.get('lng'));
     if (!params.has('lat') || !params.has('lng') || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
     if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
     const poi = params.get('poi') || '';
-    return {lat, lng, name: (params.get('name') || '').slice(0, MAX_CHARS), poi: /^[nwr]\d{1,12}$/.test(poi) ? poi : null};
+    const route = params.get('route');
+    return {lat, lng, name: (params.get('name') || '').slice(0, MAX_CHARS), poi: /^[nwr]\d{1,12}$/.test(poi) ? poi : null,
+      route: ROUTE_MODES.includes(route) ? route : null};  // destination-only deep link: the start is never part of a URL
   }
 
-  function buildPlaceHash(lat, lng, name, poi) {
+  function buildPlaceHash(lat, lng, name, poi, routeMode) {
     const params = new URLSearchParams({lat: lat.toFixed(5), lng: lng.toFixed(5)});
     if (name) params.set('name', String(name).slice(0, MAX_CHARS));
     if (poi && /^[nwr]\d{1,12}$/.test(poi)) params.set('poi', poi);
+    if (ROUTE_MODES.includes(routeMode)) params.set('route', routeMode);
     return '#' + params.toString();
   }
 
@@ -422,7 +427,6 @@
     return hours ? hours + ' ' + t(lang, 'hourShort') + (minutes ? ' ' + minutes + ' ' + t(lang, 'minuteShort') : '') : minutes + ' ' + t(lang, 'minuteShort');
   }
 
-  const ROUTE_MODES = ['car', 'foot', 'bike'];
   const MAX_ROUTE_POINTS = 100000, MAX_ROUTE_STEPS = 600;
   const inRange = (lon, lat) => Number.isFinite(lon) && Number.isFinite(lat) && Math.abs(lon) <= 180 && Math.abs(lat) <= 90;
 

@@ -344,9 +344,9 @@
       $('share-place').querySelector('span').textContent = tr('share');
       $('copy-place').textContent = tr('copyCoords');
     }
-    function setHash(place) {
+    function setHash(place, mode) {
       const id = (place.poi && place.poi.id) || (place.raw && place.raw.placeId) || null;
-      try { history.replaceState(null, '', core.buildPlaceHash(place.lat, place.lon, place.title, id)); } catch (_) { /* ignore */ }
+      try { history.replaceState(null, '', core.buildPlaceHash(place.lat, place.lon, place.title, id, mode)); } catch (_) { /* ignore */ }
     }
     function clearHash() {
       try { history.replaceState(null, '', location.pathname + location.search); } catch (_) { /* ignore */ }
@@ -1034,6 +1034,7 @@
       if (!selected || !routeClient) return;
       routeDest = {lat: selected.lat, lon: selected.lon, kind: 'place', title: selected.title};
       routeFrom = null; routeOpen = true; card.hidden = true;
+      setHash(selected, routeMode);
       resetRouteResult(); renderRouteLabels(); updatePins(); refreshSheetVisibility(); setExpanded(false);
       useMyLocation();
     }
@@ -1114,7 +1115,7 @@
       if (fit) stepsWrap.open = !isMobile();  // on a phone the step list starts collapsed so the map stays visible
       if (fit && route.bbox) {
         const all = routes.reduce((b, r) => r.bbox ? [Math.min(b[0], r.bbox[0]), Math.min(b[1], r.bbox[1]), Math.max(b[2], r.bbox[2]), Math.max(b[3], r.bbox[3])] : b, route.bbox);
-        const fitNow = () => { const bottom = isMobile() && !sheet.hidden ? Math.min(sheet.offsetHeight, window.innerHeight * 0.62) : 0; map.fitBounds([[all[0], all[1]], [all[2], all[3]]], {padding: {top: 90, left: isMobile() ? 40 : 440, right: 40, bottom: bottom + 40}, maxZoom: 17, duration: 800, essential: false}); };
+        const fitNow = () => { const bottom = isMobile() && !sheet.hidden ? Math.min(sheet.offsetHeight, window.innerHeight * 0.62) : 0; map.fitBounds([[all[0], all[1]], [all[2], all[3]]], {padding: {top: isMobile() ? 150 : 90, left: isMobile() ? 40 : 440, right: 40, bottom: bottom + 40}, maxZoom: 17, duration: 800, essential: false}); };
         requestAnimationFrame(() => requestAnimationFrame(fitNow));  // after the panel has its final height
       }
       syncSheetHeight();
@@ -1125,7 +1126,7 @@
       routeAbort = null; routeOpen = false;
       setPickingStart(false);
       resetRouteResult();
-      if (restoreCard && selected) card.hidden = false;
+      if (restoreCard && selected) { card.hidden = false; setHash(selected); }
       refreshSheetVisibility();
     }
     $('route-close').addEventListener('click', () => closeRoute(true));
@@ -1140,6 +1141,7 @@
     for (const button of document.querySelectorAll('#route-modes .mode')) {
       button.addEventListener('click', () => {
         routeMode = button.dataset.mode;
+        if (selected && routeOpen) setHash(selected, routeMode);
         for (const other of document.querySelectorAll('#route-modes .mode')) other.setAttribute('aria-pressed', String(other === button));
         buildRoute();
       });
@@ -1158,9 +1160,17 @@
       placeMarker([place.lon, place.lat]);
       showCard(place);
       // A shared link to a real place (#poi=n123) loads its full record; if the API is unreachable the coordinate card stays.
+      // A shared link to a real place (#poi=n123) loads its full record first; a route deep link (#route=car) then opens the panel with that
+      // place as destination (the start is the viewer's own choice and is never part of a link).
+      const openSharedRoute = () => {
+        if (!initialPlace.route || !routeClient) return;
+        routeMode = initialPlace.route;
+        for (const b of document.querySelectorAll('#route-modes .mode')) b.setAttribute('aria-pressed', String(b.dataset.mode === routeMode));
+        openRoute();
+      };
       if (initialPlace.poi && placesClient) {
-        placesClient.details(initialPlace.poi).then(poi => { if (selected === place) selectPoi(poi, {fly: false}); }).catch(() => {});
-      }
+        placesClient.details(initialPlace.poi).then(poi => { if (selected === place) selectPoi(poi, {fly: false}); }).catch(() => {}).then(openSharedRoute);
+      } else openSharedRoute();
     }
     syncThemeColor();
     map.on('load', () => setStatus(tr('mapLoaded')));

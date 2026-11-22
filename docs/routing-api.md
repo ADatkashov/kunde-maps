@@ -40,3 +40,6 @@ Actions -> "Build Kazakhstan routing graph" (manual): fetch the Geofabrik extrac
 ## Limitations
 No traffic, no live closures, no time-dependent restrictions, no timezone/admin data in the graph, Kazakh narration falls back to Russian,
 car/foot/bike only (no transit), two-point routes (no waypoints/alternatives yet), Valhalla image tag `latest` (pin by digest before production).
+
+## Web deep links
+`#lat=..&lng=..&name=..&poi=n123&route=car|foot|bike` opens the place and the route panel with that place as destination. The start is chosen by the viewer (device position or another point) and is **never** written to a URL; the web app updates the hash when the mode changes and removes `route=` when the panel is closed.
