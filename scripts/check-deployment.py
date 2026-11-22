@@ -21,10 +21,14 @@ def check(origin):
         raise ValueError("Expected HTTP(S) URL")
     if parsed.scheme != "https" and parsed.hostname not in ("localhost", "127.0.0.1"):
         raise ValueError("Remote deployment must use HTTPS")
-    for path in ("", "config.json", "style.json"):
-        status, _, data = get(urllib.parse.urljoin(origin, path))
+    for path in ("", "config.json", "style.json", "style-dark.json"):
+        status, headers, data = get(urllib.parse.urljoin(origin, path))
         if status != 200:
             raise ValueError(f"/{path}: expected 200, got {status}")
+        if path.startswith("style") and "no-cache" not in {k.lower(): v for k, v in headers.items()}.get("cache-control", ""):
+            raise ValueError(f"/{path}: styles must be served with Cache-Control: no-cache so releases take effect")
+        if path == "style-dark.json" and json.loads(data).get("version") != 8:
+            raise ValueError("Invalid dark MapLibre style")
         if path == "config.json":
             config = json.loads(data)
         if path == "style.json":

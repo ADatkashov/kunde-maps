@@ -11,7 +11,7 @@ const CORS = {'access-control-allow-origin': '*', 'access-control-expose-headers
 const place = (id, name, kind, lat, lon, extra = {}) => ({id, name, name_ru: name, name_kk: '', kind, lat, lon, ...extra});
 const ALMATY = place(1, 'Алматы', 'city', 43.2364, 76.9457, {name_kk: 'Алматы'});
 const MOCK_MAPLIBRE = `(function () {
-  window.__calls = {flyTo: [], markers: [], removed: 0, paint: [], layout: []};
+  window.__calls = {flyTo: [], markers: [], removed: 0, styles: []};
   class Map {
     constructor(o) { this.h = {}; this.o = o; window.__map = this; setTimeout(() => { this.fire('style.load'); this.fire('load'); }, 0); }
     fire(e, ev) { (this.h[e] || []).forEach(f => f(ev)); }
@@ -19,9 +19,8 @@ const MOCK_MAPLIBRE = `(function () {
     addControl() {}
     getCenter() { return {lng: this.o.center[0], lat: this.o.center[1]}; }
     getZoom() { return this.o.zoom; }
-    getLayer(id) { return {id}; }
-    setPaintProperty(l, p, v) { window.__calls.paint.push([l, p, v]); }
-    setLayoutProperty(l, p, v) { window.__calls.layout.push([l, p, JSON.stringify(v)]); }
+    getStyle() { return this.o.style; }
+    setStyle(style, options) { window.__calls.styles.push({style, options}); this.o.style = style; }
     flyTo(o) { window.__calls.flyTo.push(o); }
     queryRenderedFeatures() { return []; }
   }
@@ -206,7 +205,20 @@ const tests = {
     await page.locator('#language').click();
     assert.match(await results(page).first().innerText(), /Almaty\s+City/);
     assert.equal(await page.locator('#search-query').getAttribute('placeholder'), 'Search places or addresses');
-    assert.ok((await calls(page)).layout.some(l => l[2].includes('name:en')));
+    const style = (await calls(page)).styles.at(-1);
+    assert.equal(style.options.diff, true, 'language switch must diff the style (keeps tiles)');
+    const placeLayer = style.style.layers.find(l => l.id === 'place-labels');
+    assert.ok(JSON.stringify(placeLayer.layout['text-field']).startsWith('["coalesce",["get","name:en"]'), 'EN labels use name:en first');
+    const peaks = style.style.layers.find(l => l.id === 'peak-labels');
+    assert.ok(JSON.stringify(peaks.layout['text-field']).includes('ele'), 'templates with extra parts (elevation) survive localisation');
+    // An open place card is re-localized too (name_en in EN, name_kk in KK).
+    await results(page).first().click();
+    await page.locator('#selection').waitFor();
+    assert.equal(await page.locator('#selection-title').innerText(), 'Almaty');
+    assert.equal(await page.locator('#selection-kind').innerText(), 'City');
+    await page.locator('#language').click();  // en -> ru
+    assert.equal(await page.locator('#selection-title').innerText(), 'Алматы');
+    assert.equal(await page.locator('#selection-kind').innerText(), 'Город');
     await context.close();
   },
   async 'opening a shared link restores the place card'(browser) {
@@ -230,14 +242,23 @@ const tests = {
     assert.equal(await page.locator('#selection-coords').innerText(), '43.25000, 76.95000');
     await context.close();
   },
-  async 'theme toggle persists and recolors the map'(browser) {
+  async 'theme toggle swaps to the generated dark style, persists, and restores light'(browser) {
     const {page, context} = await openPage(browser);
     await page.locator('#theme').click();
     assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
     assert.equal(await page.evaluate(() => localStorage.getItem('kunde-theme')), 'dark');
-    assert.ok((await calls(page)).paint.some(p => p[0] === 'background' && p[2] === '#0f1626'));
+    await page.waitForFunction(() => window.__calls.styles.length > 0);
+    const bg = style => style.layers.find(l => l.id === 'background').paint['background-color'];
+    const dark = (await calls(page)).styles.at(-1).style;
+    assert.equal(bg(dark), '#0e1524');
+    assert.equal(dark.metadata['kunde:theme'], 'dark');
     await page.reload();
     assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
+    await page.locator('#status').filter({hasText: 'Карта загружена'}).waitFor();
+    assert.equal(await page.evaluate(() => window.__map.o.style.metadata['kunde:theme']), 'dark', 'saved theme is applied at start');
+    await page.locator('#theme').click();
+    await page.waitForFunction(() => window.__calls.styles.length > 0);
+    assert.equal(bg((await calls(page)).styles.at(-1).style), '#f3f4ef', 'toggling back restores the light style');
     await context.close();
   },
   async 'mobile layout: no horizontal overflow, touch targets >= 44px, sheet above attribution zone'(browser) {

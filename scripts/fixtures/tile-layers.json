@@ -1,0 +1,269 @@
+{
+ "_comment": "Vector layers and fields of the production PMTiles (OpenMapTiles schema 3.16, planetiler). Other name:<lang> fields omitted.",
+ "layers": {
+  "aerodrome_label": {
+   "minzoom": 8,
+   "maxzoom": 14,
+   "fields": [
+    "class",
+    "ele",
+    "ele_ft",
+    "iata",
+    "icao",
+    "name",
+    "name:en",
+    "name:kk",
+    "name:latin",
+    "name:nonlatin",
+    "name:ru",
+    "name_de",
+    "name_en",
+    "name_int"
+   ]
+  },
+  "aeroway": {
+   "minzoom": 10,
+   "maxzoom": 14,
+   "fields": [
+    "class",
+    "ref"
+   ]
+  },
+  "boundary": {
+   "minzoom": 0,
+   "maxzoom": 14,
+   "fields": [
+    "adm0_l",
+    "adm0_r",
+    "admin_level",
+    "disputed",
+    "maritime"
+   ]
+  },
+  "building": {
+   "minzoom": 13,
+   "maxzoom": 14,
+   "fields": [
+    "colour",
+    "hide_3d",
+    "render_height",
+    "render_min_height"
+   ]
+  },
+  "housenumber": {
+   "minzoom": 14,
+   "maxzoom": 14,
+   "fields": [
+    "housenumber"
+   ]
+  },
+  "landcover": {
+   "minzoom": 2,
+   "maxzoom": 14,
+   "fields": [
+    "class",
+    "subclass"
+   ]
+  },
+  "landuse": {
+   "minzoom": 4,
+   "maxzoom": 14,
+   "fields": [
+    "class"
+   ]
+  },
+  "mountain_peak": {
+   "minzoom": 7,
+   "maxzoom": 14,
+   "fields": [
+    "class",
+    "ele",
+    "ele_ft",
+    "name",
+    "name:en",
+    "name:kk",
+    "name:latin",
+    "name:nonlatin",
+    "name:ru",
+    "name_de",
+    "name_en",
+    "name_int",
+    "rank"
+   ]
+  },
+  "park": {
+   "minzoom": 4,
+   "maxzoom": 14,
+   "fields": [
+    "class",
+    "name",
+    "name:en",
+    "name:kk",
+    "name:latin",
+    "name:nonlatin",
+    "name:ru",
+    "name_de",
+    "name_en",
+    "name_int",
+    "rank"
+   ]
+  },
+  "place": {
+   "minzoom": 1,
+   "maxzoom": 14,
+   "fields": [
+    "capital",
+    "class",
+    "iso_a2",
+    "name",
+    "name:en",
+    "name:kk",
+    "name:latin",
+    "name:nonlatin",
+    "name:ru",
+    "name_de",
+    "name_en",
+    "name_int",
+    "rank"
+   ]
+  },
+  "poi": {
+   "minzoom": 12,
+   "maxzoom": 14,
+   "fields": [
+    "class",
+    "indoor",
+    "layer",
+    "level",
+    "name",
+    "name:en",
+    "name:kk",
+    "name:latin",
+    "name:nonlatin",
+    "name:ru",
+    "name_de",
+    "name_en",
+    "name_int",
+    "rank",
+    "subclass"
+   ]
+  },
+  "transportation": {
+   "minzoom": 4,
+   "maxzoom": 14,
+   "fields": [
+    "access",
+    "bicycle",
+    "brunnel",
+    "class",
+    "foot",
+    "horse",
+    "indoor",
+    "layer",
+    "level",
+    "mtb_scale",
+    "official",
+    "oneway",
+    "ramp",
+    "service",
+    "subclass",
+    "surface",
+    "toll"
+   ]
+  },
+  "transportation_name": {
+   "minzoom": 6,
+   "maxzoom": 14,
+   "fields": [
+    "class",
+    "indoor",
+    "layer",
+    "level",
+    "name",
+    "name:en",
+    "name:kk",
+    "name:latin",
+    "name:nonlatin",
+    "name:ru",
+    "name_de",
+    "name_en",
+    "name_int",
+    "network",
+    "ref",
+    "ref_length",
+    "route_1_colour",
+    "route_1_name",
+    "route_1_network",
+    "route_1_ref",
+    "route_2_colour",
+    "route_2_name",
+    "route_2_network",
+    "route_2_ref",
+    "route_3_colour",
+    "route_3_name",
+    "route_3_network",
+    "route_3_ref",
+    "route_4_name",
+    "route_4_network",
+    "route_4_ref",
+    "route_5_name",
+    "route_5_network",
+    "route_5_ref",
+    "route_6_name",
+    "route_6_network",
+    "route_6_ref",
+    "route_7_name",
+    "route_7_network",
+    "route_7_ref",
+    "route_8_name",
+    "route_8_network",
+    "route_8_ref",
+    "subclass"
+   ]
+  },
+  "water": {
+   "minzoom": 0,
+   "maxzoom": 14,
+   "fields": [
+    "class",
+    "id",
+    "intermittent"
+   ]
+  },
+  "water_name": {
+   "minzoom": 5,
+   "maxzoom": 14,
+   "fields": [
+    "class",
+    "intermittent",
+    "name",
+    "name:en",
+    "name:kk",
+    "name:latin",
+    "name:nonlatin",
+    "name:ru",
+    "name_de",
+    "name_en",
+    "name_int"
+   ]
+  },
+  "waterway": {
+   "minzoom": 3,
+   "maxzoom": 14,
+   "fields": [
+    "brunnel",
+    "class",
+    "intermittent",
+    "name",
+    "name:en",
+    "name:kk",
+    "name:latin",
+    "name:nonlatin",
+    "name:ru",
+    "name_de",
+    "name_en",
+    "name_int"
+   ]
+  }
+ }
+}

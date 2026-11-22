@@ -4,11 +4,19 @@ on:
     paths:
       - 'apps/web/**'
       - 'infrastructure/maps/**'
+      - 'scripts/build-style.py'
+      - 'scripts/test-style.py'
+      - 'scripts/validate-style.mjs'
+      - 'scripts/fixtures/**'
       - '.github/workflows/web-regression.yml'
   pull_request:
     paths:
       - 'apps/web/**'
       - 'infrastructure/maps/**'
+      - 'scripts/build-style.py'
+      - 'scripts/test-style.py'
+      - 'scripts/validate-style.mjs'
+      - 'scripts/fixtures/**'
       - '.github/workflows/web-regression.yml'
 permissions:
   contents: read
@@ -23,6 +31,16 @@ jobs:
           node --check apps/web/core.js
       - name: Unit-test web core (search client, i18n, hash links)
         run: node --test apps/web/test/*.test.js
+      - name: Map styles are generated, consistent with the tile schema, and spec-valid
+        run: |
+          set -euo pipefail
+          python3 scripts/build-style.py --check
+          python3 scripts/test-style.py
+          mkdir -p /tmp/stylespec && cp scripts/validate-style.mjs /tmp/stylespec/
+          cd /tmp/stylespec
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund @maplibre/maplibre-gl-style-spec@23
+          node validate-style.mjs "$GITHUB_WORKSPACE/apps/web/style.json" "$GITHUB_WORKSPACE/apps/web/style-dark.json"
       - name: Validate map style and HTML references
         run: |
           python3 - <<'PY'

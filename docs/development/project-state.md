@@ -12,7 +12,7 @@ Known limits
 - Search API has per-IP rate limits but no API keys/tokens yet. CSP header and SRI/vendoring of unpkg libraries not done.
 - Render Free: cold start (~30-60 s) and ~155 MB index re-download per new instance.
 - No categories/POI filters, routing, navigation, favorites, mobile apps yet.
-- Cartographic style is still the minimal 7-layer preview (no road classes, POI icons, building heights, dark style file).
+- Map style v2 has no POI icons/sprites, no own glyph host, no terrain shading.
 
 Phase 2 (this update)
 - A. Search API protection (PR #5, #6, live on DEV): token-bucket rate limit with `429` + `Retry-After`, concurrency cap, `/metrics`
@@ -22,3 +22,6 @@ Phase 2 (this update)
   (top-1 0.417 -> 1.000 on 36 real places), web sends `lang` and map centre. Takes effect on DEV after the index is rebuilt
   from OSM (new tags) and `MAPS_SEARCH_INDEX_*` are switched; the server remains compatible with the old v1 index until then.
 - Open: cartographic style v2, web CSP/SRI, index for house-number geocoding, API keys for B2B.
+- C. Cartographic style v2 (generated light/dark styles, see `docs/design/design-system.md`): full OpenMapTiles layer use, road hierarchy
+  with casings, parks/water/landcover/ice/rock, peaks with elevation, RU/KK/EN labels, POI dots, house numbers. CI: generator drift,
+  schema/field check against the real archive, official spec validator, mutation-checked.
