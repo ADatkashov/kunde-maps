@@ -5,10 +5,9 @@
 <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)">
 <title>KUNDE Maps — Алматы</title>
-<link href="https://unpkg.com/maplibre-gl@5.9.0/dist/maplibre-gl.css" rel="stylesheet">
+<link href="./vendor/maplibre-gl.css" rel="stylesheet">
 <link href="./ui.css" rel="stylesheet">
-<script>/* Apply the saved theme before first paint to avoid a flash. */
-try { var t = localStorage.getItem('kunde-theme'); if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t; } catch (_) {}</script>
+<script src="./theme-init.js"></script>
 </head>
 <body>
 <main id="map" aria-label="Интерактивная карта Алматы"></main>
@@ -82,8 +81,8 @@ try { var t = localStorage.getItem('kunde-theme'); if (t === 'dark' || t === 'li
 </div>
 <div id="status" role="status" aria-live="polite">Загрузка карты…</div>
 
-<script src="https://unpkg.com/maplibre-gl@5.9.0/dist/maplibre-gl.js"></script>
-<script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
+<script src="./vendor/maplibre-gl.js"></script>
+<script src="./vendor/pmtiles.js"></script>
 <script src="./core.js"></script>
 <script src="./map.js"></script>
 </body></html>

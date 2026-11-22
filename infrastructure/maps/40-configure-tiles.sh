@@ -22,3 +22,24 @@ if [ -n "${MAPS_SEARCH_URL:-}" ]; then
   search_json=$(printf ',"searchUrl":"%s"' "${MAPS_SEARCH_URL%/}")
 fi
 printf '{"styleUrl":"/style.json"%s%s}\n' "$tile_json" "$search_json" > /srv/kunde-web/config.json
+
+# Content-Security-Policy and friends, generated from the (already validated) public origins so the policy lists exactly the hosts
+# the page talks to: our origin, the tile host, the Search API and the public glyph host. Nothing inline, nothing eval-able.
+csp_file=${CSP_FILE:-/etc/nginx/security-headers.inc}
+connect="'self' https://fonts.openmaptiles.org"
+if [ -n "${MAPS_TILE_URL:-}" ]; then
+  connect="$connect $(printf '%s' "$MAPS_TILE_URL" | sed -E 's#^(https://[^/]+)/.*#\1#')"
+fi
+if [ -n "${MAPS_SEARCH_URL:-}" ]; then
+  connect="$connect ${MAPS_SEARCH_URL%/}"
+fi
+csp="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src $connect; worker-src blob:; child-src blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'"
+mkdir -p "$(dirname "$csp_file")"
+cat > "$csp_file" <<EOF
+add_header Content-Security-Policy "$csp" always;
+add_header X-Content-Type-Options nosniff always;
+add_header Referrer-Policy strict-origin-when-cross-origin always;
+add_header X-Frame-Options DENY always;
+add_header Permissions-Policy "geolocation=(self), camera=(), microphone=(), payment=(), usb=()" always;
+add_header Strict-Transport-Security "max-age=31536000" always;
+EOF
