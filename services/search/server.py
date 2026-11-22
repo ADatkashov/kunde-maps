@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import places
 import textnorm
 from protection import BusyError, ConcurrencyGate, Metrics, TokenBuckets, client_ip, env_int
 
@@ -19,8 +20,8 @@ DEFAULT_LIMIT = 10
 MAX_RESULTS = 20
 ALLOWED_ORIGINS = {"https://kunde-maps-web-dev.onrender.com"}
 # Abuse protection (all configurable; see docs/search-prototype.md).
-RATE_PER_MINUTE = env_int(os.environ, "MAPS_RATE_LIMIT_PER_MINUTE", 60, 1, 100000)
-RATE_BURST = env_int(os.environ, "MAPS_RATE_LIMIT_BURST", 20, 1, 10000)
+RATE_PER_MINUTE = env_int(os.environ, "MAPS_RATE_LIMIT_PER_MINUTE", 120, 1, 100000)
+RATE_BURST = env_int(os.environ, "MAPS_RATE_LIMIT_BURST", 30, 1, 10000)
 MAX_CONCURRENT = env_int(os.environ, "MAPS_MAX_CONCURRENT_SEARCHES", 16, 1, 256)
 TRUSTED_HOPS = env_int(os.environ, "MAPS_TRUSTED_PROXY_HOPS", 1, 0, 5)
 METRICS_TOKEN = os.environ.get("MAPS_METRICS_TOKEN", "")
@@ -187,15 +188,20 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/debug/client":
             self._debug_client()
             return "metrics"
-        if parsed.path != "/v1/search":
+        is_places = parsed.path in ("/v1/places", "/v1/categories") or parsed.path.startswith("/v1/places/")
+        if parsed.path != "/v1/search" and not is_places:
             self.reply(404, {"error": "not_found"})
             return "other"
+        route = "places" if is_places else "search"
         ip = client_ip(self.headers.get("X-Forwarded-For"), self.client_address[0], TRUSTED_HOPS)
         allowed, retry_after = LIMITER.check(ip)
         if not allowed:
             METRICS.incr("rate_limited")
             self.reply(429, {"error": "rate_limited", "retry_after": retry_after}, {"Retry-After": str(retry_after)})
-            return "search"
+            return route
+        if is_places:
+            self._places(parsed)
+            return route
         if not DB_PATH.is_file():
             self.reply(503, {"error": "index_unavailable"}, {"Retry-After": "5"})
             return "search"
@@ -233,6 +239,57 @@ class Handler(BaseHTTPRequestHandler):
         except sqlite3.Error:
             self.reply(503, {"error": "index_unavailable"}, {"Retry-After": "5"})
         return "search"
+
+    def _places(self, parsed):
+        """Places API (index schema v3): viewport, nearby, details, categories. Parameters are validated, never logged."""
+        if not DB_PATH.is_file():
+            self.reply(503, {"error": "index_unavailable"}, {"Retry-After": "5"})
+            return
+        params = parse_qs(parsed.query)
+        first = lambda name: params.get(name, [None])[0]
+        try:
+            connection = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+            connection.row_factory = sqlite3.Row
+            try:
+                if _schema_version(connection) < 3:
+                    self.reply(503, {"error": "places_unavailable"})
+                    return
+                with GATE:
+                    if parsed.path == "/v1/categories":
+                        self.reply(200, {"categories": places.category_info(connection), "attribution": places.ATTRIBUTION})
+                    elif parsed.path.startswith("/v1/places/"):
+                        place = places.by_id(connection, parsed.path[len("/v1/places/"):])
+                        if place is None:
+                            self.reply(404, {"error": "place_not_found"})
+                        else:
+                            self.reply(200, {"place": place, "attribution": places.ATTRIBUTION})
+                    else:
+                        cats = places.parse_categories(first("category"))
+                        limit = places.parse_limit(first("limit"))
+                        if first("bbox") is not None:
+                            box = places.parse_bbox(first("bbox"))
+                            center = None
+                            if first("lat") is not None or first("lon") is not None:
+                                center = (places.parse_float(first("lat"), "lat", -90, 90), places.parse_float(first("lon"), "lon", -180, 180))
+                            results, truncated = places.in_viewport(connection, box, cats, limit, center)
+                        elif first("lat") is not None and first("lon") is not None:
+                            lat, lon = places.parse_float(first("lat"), "lat", -90, 90), places.parse_float(first("lon"), "lon", -180, 180)
+                            radius = places.DEFAULT_RADIUS_M
+                            if first("radius") is not None:
+                                radius = int(places.parse_float(first("radius"), "radius", 50, places.MAX_RADIUS_M))
+                            results, truncated = places.nearby(connection, lat, lon, radius, cats, limit)
+                        else:
+                            raise places.ParamError("bbox_or_lat_lon_required")
+                        self.reply(200, {"places": results, "count": len(results), "truncated": truncated, "attribution": places.ATTRIBUTION})
+            finally:
+                connection.close()
+        except places.ParamError as error:
+            self.reply(400, {"error": str(error)})
+        except BusyError:
+            METRICS.incr("busy")
+            self.reply(503, {"error": "busy"}, {"Retry-After": "1"})
+        except sqlite3.Error:
+            self.reply(503, {"error": "index_unavailable"}, {"Retry-After": "5"})
 
     def _metrics(self):
         if not METRICS_TOKEN:

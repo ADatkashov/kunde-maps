@@ -7,10 +7,18 @@ Way representative points are approximate and are NOT entrance coordinates.
 import json
 import sys
 
+import categories
+
 
 def relevant(tags):
-    return bool(tags.get("name") or tags.get("name:ru") or tags.get("name:kk") or tags.get("name:en")
-                or (tags.get("addr:street") and tags.get("addr:housenumber")))
+    if len(tags) == 0:  # the vast majority of OSM nodes carry no tags at all
+        return False
+    if (tags.get("name") or tags.get("name:ru") or tags.get("name:kk") or tags.get("name:en")
+            or (tags.get("addr:street") and tags.get("addr:housenumber"))):
+        return True
+    # Unnamed parking lots, ATMs and fuel stations are real, useful places (see categories.NAMELESS_OK).
+    category, _ = categories.categorize(tags)
+    return category in categories.NAMELESS_OK
 
 
 def extract(source, destination):
@@ -21,7 +29,9 @@ def extract(source, destination):
 
     fields = ("name", "name:ru", "name:kk", "name:en", "alt_name", "official_name", "old_name", "int_name",
               "addr:street", "addr:housenumber", "amenity", "shop", "place", "highway", "tourism", "leisure",
-              "population", "capital")
+              "population", "capital", "addr:city", "phone", "contact:phone", "mobile", "website", "contact:website", "url",
+              "opening_hours", "brand", "operator", "cuisine", "wheelchair", "healthcare", "office", "railway",
+              "public_transport", "craft", "aeroway")
     count = 0
     with open(destination, "w", encoding="utf-8") as output:
         class Handler(osmium.SimpleHandler):
