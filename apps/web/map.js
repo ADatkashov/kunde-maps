@@ -17,9 +17,9 @@
   };
   // Local settings (device only): units, low-power mode, search history switch, 3D buildings.
   let settings = Shell.parseSettings(store.get('kunde-settings'));
-  if (store.get('kunde-settings') == null && Shell.suggestLowPower(navigator)) settings.lowPower = true;   // weak devices start without heavy effects
+  if (store.get('kunde-settings') == null && Shell.suggestLowPower(typeof navigator !== 'undefined' ? navigator : null)) settings.lowPower = true;   // weak devices start without heavy effects
   core.setUnits(settings.units); nav.setNavUnits(settings.units);
-  document.body.classList.toggle('low-power', settings.lowPower);
+  if (document.body && document.body.classList) document.body.classList.toggle('low-power', settings.lowPower);
   const persistSettings = () => store.set('kunde-settings', JSON.stringify(settings));
   let searchHistory = settings.history ? Shell.parseHistory(store.get('kunde-history')) : [];
   let lang = core.LANGS.includes(store.get('kunde-lang')) ? store.get('kunde-lang') : 'ru';
@@ -90,7 +90,9 @@
     }
     // Places (Phase 3): a clustered GeoJSON source. It is injected into every style we pass to setStyle, otherwise a theme or
     // language switch would remove it. `placesData` always holds the latest results.
-    const BUILDING_UNKNOWN_HEIGHT = 5;   // OpenMapTiles fills render_height with this default when OSM has neither height nor levels: that is "unknown", not a measurement
+    // Measured on the production tiles (Almaty, z16): every building carries render_height (1-63 m, no spike at any default). We still cannot tell a real
+    // 5 m building from a processing default, so heights up to this value stay flat footprints instead of being drawn as invented boxes.
+    const BUILDING_UNKNOWN_HEIGHT = 5;
     let placesData = {type: 'FeatureCollection', features: []};
     let routeData = {type: 'FeatureCollection', features: []};
     let navData = {type: 'FeatureCollection', features: []};   // travelled / remaining parts of the route during navigation
@@ -100,7 +102,7 @@
       const dark = theme === 'dark';
       const stroke = dark ? '#0b1220' : '#ffffff';
       // Optional 3D buildings (off by default, never in low-power mode): only buildings whose tile record carries a real height
-      // (OpenMapTiles render_height from OSM height / building:levels) are extruded; everything else stays the flat footprint.
+      // (OpenMapTiles render_height, derived from OSM height / building:levels) and that are taller than a few metres are extruded; everything else stays flat.
       if (Shell.buildingsEnabled(settings)) {
         const at = style.layers.findIndex(l => l.id === 'buildings');
         const source = at >= 0 && style.layers[at].source;

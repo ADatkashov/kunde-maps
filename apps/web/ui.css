@@ -95,6 +95,7 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .chip[aria-pressed="true"] { background: color-mix(in srgb, var(--c, var(--primary)) 22%, var(--surface)); border-color: var(--c, var(--primary)); }
 .chip.action { color: var(--primary-text); }
 .chip.action .icon { color: var(--primary-text); }
+.chip.action[aria-pressed="true"], .chip.action[aria-pressed="true"] .icon { color: var(--text); }   /* on the tinted selected fill, primary-text would fall below 4.5:1 */
 .chip.busy .icon { animation: spin .9s linear infinite; }
 .chip.extra[hidden] { display: none; }
 .chip.more { color: var(--text-2); padding: 0 14px; }

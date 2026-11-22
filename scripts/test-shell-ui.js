@@ -458,6 +458,30 @@ const tests = {
     assert.equal(await page.locator('#quick-actions .qa').count(), 4);
     await context.close();
   },
+  async 'axe-core (WCAG 2.1 A/AA): no violations on Home, Directions, Saved, Profile, a place card, the layers popover and the dialog, in dark and light'(browser) {
+    let axeSource;
+    try { axeSource = require('fs').readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8'); }
+    catch (_) { if (process.env.REQUIRE_AXE) throw new Error('axe-core is required (REQUIRE_AXE=1) but not installed'); console.log('     (skipped: axe-core not installed; npm i axe-core)'); return; }
+    for (const colorScheme of ['dark', 'light']) {
+      const {page, context} = await openPage(browser, {colorScheme, storage: {'kunde-theme': colorScheme}, geo: {latitude: 43.2389, longitude: 76.9457}});
+      await page.addScriptTag({content: axeSource});
+      const audit = async label => {
+        const result = await page.evaluate(() => axe.run(document, {runOnly: {type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}, rules: {'color-contrast': {enabled: true}}}));
+        const bad = result.violations.map(v => v.id + ': ' + v.nodes.slice(0, 3).map(n => n.target.join(' ') + ' [' + (n.any[0] && n.any[0].message || n.failureSummary || '').slice(0, 140) + ']').join(' ; '));
+        assert.deepEqual(bad, [], `${colorScheme} / ${label}`);
+      };
+      await audit('home');
+      await page.locator('#sheet-handle').focus(); await page.keyboard.press('ArrowUp'); await page.waitForTimeout(400); await audit('home, sheet half');
+      await page.locator('#tabbar .tab[data-tab=route]').click(); await audit('directions');
+      await page.locator('#tabbar .tab[data-tab=favorites]').click(); await audit('saved');
+      await page.locator('#tabbar .tab[data-tab=profile]').click(); await audit('profile');
+      await page.locator('#tabbar .tab[data-tab=search]').click();
+      await page.locator('#quick-cats .qcat[data-category=pharmacy]').click(); await page.locator('#places-list .row').first().click(); await page.locator('#selection').waitFor(); await audit('place card');
+      await page.locator('#layers-btn').click(); await audit('layers popover'); await page.keyboard.press('Escape');
+      await page.locator('#selection-close').click(); await page.locator('#places-clear').click(); await page.locator('#qa-add').click(); await audit('dialog');
+      await context.close();
+    }
+  },
   async 'accessibility smoke: names, roles, one current tab, modal dialog, switches expose state, 200% text does not break the layout'(browser) {
     const {page, context} = await openPage(browser);
     const unnamed = await page.evaluate(() => [...document.querySelectorAll('button, [role=button], a[href], input, [role=switch]')].filter(e => e.offsetParent !== null || e.closest('.sheet')).filter(e => {
