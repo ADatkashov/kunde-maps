@@ -121,3 +121,25 @@ Render-network problem. Fix: the provisioner sends `kunde-maps-search-provisione
 3. Update the Render env vars (`MAPS_SEARCH_INDEX_URL`, `..._FALLBACK_URL`, `..._SHA256`) to the new run and deploy.
 
 The index is OSM-derived (ODbL); attribution: (c) OpenStreetMap contributors. Provenance is published beside each index.
+
+## Abuse protection and metrics (Phase 2)
+Implemented in `services/search/protection.py`, wired in `server.py`. CORS is **not** treated as protection.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `MAPS_RATE_LIMIT_PER_MINUTE` | 60 | sustained requests per client per minute (token bucket refill) |
+| `MAPS_RATE_LIMIT_BURST` | 20 | bucket size (short bursts, e.g. fast typing) |
+| `MAPS_MAX_CONCURRENT_SEARCHES` | 16 | simultaneous searches; above it -> `503 busy` + `Retry-After: 1` |
+| `MAPS_TRUSTED_PROXY_HOPS` | 1 | the Nth entry from the right of `X-Forwarded-For` is the client IP; client-supplied left entries are ignored |
+| `MAPS_METRICS_TOKEN` | unset | enables `GET /metrics` (Bearer token); without it `/metrics` is `404` |
+
+- Over the limit: `429 {"error":"rate_limited","retry_after":N}` with `Retry-After`, exposed to browsers via CORS. Invalid requests also
+  consume tokens; `/health` is never limited.
+- Buckets are in memory only, keyed by a salted SHA-256 prefix (no raw IPs), LRU-bounded to 20,000 keys. Multiple instances would
+  each keep their own bucket (acceptable on a single Render instance; a shared store is needed before scaling out).
+- Metrics (Prometheus text): request counts by route and status class, latency histogram, `rate_limited`, `busy`, `empty_results`,
+  active bucket count. **No query text, coordinates or IP addresses** in metrics or logs; the access log is one JSON line
+  `{"route","status","ms"}` per non-health request.
+- Responses carry `X-Content-Type-Options`, `Referrer-Policy: no-referrer`, a restrictive `Content-Security-Policy`, `Cache-Control: no-store`.
+  Sockets time out after 15 s (slowloris).
+- Not done yet: API keys/quotas for B2B clients and short-lived tokens for the public web client (needs a token-issuing backend).
