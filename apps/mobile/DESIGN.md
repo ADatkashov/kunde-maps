@@ -13,3 +13,11 @@ details show actual data from the platform. Keep attribution readable in
 both themes. Use safe areas for interactive controls and preserve system
 text scaling. Place cards omit unavailable fields. Keep a loaded route
 visible while network-dependent rerouting is unavailable.
+
+Phase 6.1 keeps the map full-screen behind the floating search and tools.
+The sheet has collapsed, half and expanded snap points. Route planning
+uses A/B fields with a swap control, a mode selector, a route summary and
+an action pinned above attribution so Build and Start stay visible.
+The trip view uses a navy maneuver banner with large distance text and
+keeps End navigation in reach at the bottom. Layers controls the theme
+and basemap place labels. The tab bar yields space to the keyboard.

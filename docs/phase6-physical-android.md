@@ -45,3 +45,25 @@ Leave any step you did not exercise as **NOT TESTED**. The
 [mobile runbook](../apps/mobile/README.md#emulator-and-simulator-checks)
 also documents emulator checks. Physical iPhone validation is tracked
 separately and remains open.
+
+## Phase 6.1 follow-up
+
+The owner subsequently reported that routing did not work on the same
+0.6.0 build. The exact points, error message and device logs were
+unavailable. The Flutter client used the same HTTPS GET contract as the
+web planner. The server decodes the Valhalla polyline and returns GeoJSON.
+The client sends `lat,lon` per endpoint and renders `[lon,lat]` geometry.
+
+The client could lose endpoint taps on interactive map features, reject
+a usable route when an optional alternative was malformed, and report
+distinct route errors as generic failures. The route line now uses
+explicit native GeoJSON style layers. The planner keeps its build/start
+action visible. Logs contain fixed failure categories and omit locations.
+
+For a public DEV check, request
+`GET /v1/route?from=43.238194,76.944980&to=43.255500,76.955326&mode=car&lang=ru&alternatives=1`
+on `https://kunde-maps-routing-dev.onrender.com`. The Flutter client received
+2,817 m, 219 seconds, five geometry positions and two alternatives for
+this request. The Android emulator rendered the selected route in the
+production MapLibre style using the live API. The report of the original
+device failure still needs a retest with the new signed build.

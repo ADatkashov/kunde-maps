@@ -14,7 +14,7 @@ void main() {
     expect(app.locale, const Locale('en'));
     expect(app.themeMode, ThemeMode.dark);
     expect(find.byType(NavigationBar), findsOneWidget);
-    expect(find.text('KUNDE Maps'), findsOneWidget);
+    expect(find.text('Address or place'), findsOneWidget);
     expect(find.byType(TextField), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });

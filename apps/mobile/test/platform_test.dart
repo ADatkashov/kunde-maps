@@ -101,6 +101,67 @@ void main() {
     expect(places.single.name('kk', ''), 'Абай');
   });
 
+  test('route coordinates match the web contract and invalid alternatives are skipped', () async {
+    final api = PlatformApi(
+      MockClient((request) async {
+        expect(request.method, 'GET');
+        expect(request.url.path, '/v1/route');
+        expect(request.url.queryParameters, {
+          'from': '43.238194,76.944980',
+          'to': '43.255500,76.955326',
+          'mode': 'car',
+          'lang': 'en',
+          'alternatives': '1',
+        });
+        expect(request.headers['Accept'], 'application/json');
+        expect(request.headers.containsKey('Authorization'), isFalse);
+        return http.Response(
+          jsonEncode({
+            ...fixture,
+            'instruction_language': 'en',
+            'alternatives': [
+              null,
+              {'distance_m': 1},
+              {...fixture, 'distance_m': 3000},
+            ],
+          }),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+    final routes = await api.route(
+      const Point(43.238194, 76.94498),
+      const Point(43.2555, 76.955326),
+      'car',
+      'en',
+      alternatives: true,
+    );
+    expect(routes, hasLength(2));
+    expect(routes.last.language, 'en');
+    expect(routes.first.points.first.lat, 43.238194);
+    expect(routes.first.points.first.lon, 76.94498);
+  });
+
+  test('route service detail is allowlisted for localized feedback', () async {
+    final api = PlatformApi(
+      MockClient(
+        (request) async => http.Response('{"error":"no_road_near_point"}', 404),
+      ),
+    );
+    await expectLater(
+      api.route(
+        const Point(43.238194, 76.94498),
+        const Point(43.2555, 76.955326),
+        'car',
+        'en',
+      ),
+      throwsA(
+        isA<ApiFailure>().having((error) => error.code, 'code', 'routeNoRoad'),
+      ),
+    );
+  });
+
   test('places preserve stable IDs and rate-limit delay is surfaced', () async {
     final api = PlatformApi(
       MockClient((request) async {

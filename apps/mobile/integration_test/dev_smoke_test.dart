@@ -8,10 +8,13 @@ import 'package:maps/core/platform_api.dart';
 import 'package:maps/features/map_style.dart';
 import 'package:material_ui/material_ui.dart';
 
-void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+import 'route_journey.dart';
 
-  testWidgets('native MapLibre renders roads from KUNDE DEV PMTiles', (
+void main() {
+  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  routeJourney(binding);
+
+  testWidgets('native MapLibre renders roads and a live DEV route', (
     tester,
   ) async {
     final style = await nativeStyle(false, 'en');
@@ -29,6 +32,16 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: SizedBox.expand(child: nativeView)),
     );
+    final client = http.Client();
+    addTearDown(client.close);
+    final routes = await PlatformApi(client).route(
+      const Point(43.238194, 76.94498),
+      const Point(43.2555, 76.955326),
+      'car',
+      'en',
+      alternatives: true,
+    );
+    var routeShown = false;
     final watch = Stopwatch()..start();
     while (watch.elapsed < const Duration(seconds: 55)) {
       await tester.pump(const Duration(milliseconds: 500));
@@ -39,9 +52,22 @@ void main() {
         ['road-minor', 'road-tertiary', 'road-secondary', 'road-primary'],
         null,
       );
-      if (roads.isNotEmpty) return;
+      if (roads.isEmpty) continue;
+      if (!routeShown) {
+        await controller!.setGeoJsonSource(
+          routeSourceId,
+          routeFeatures(routes, routes.first),
+        );
+        routeShown = true;
+      }
+      final line = await controller!.queryRenderedFeaturesInRect(
+        Offset.zero & size,
+        [primaryRouteLayerId],
+        null,
+      );
+      if (line.isNotEmpty) return;
     }
-    fail('KUNDE DEV road layers did not render within 55 seconds');
+    fail('KUNDE DEV roads and selected route did not render within 55 seconds');
   });
 
   testWidgets(

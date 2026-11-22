@@ -2,7 +2,10 @@
 set -euo pipefail
 BASE="${MAP_BASE_URL:-http://127.0.0.1:8080}"
 echo "Checking map web server: $BASE"
-curl --fail --silent --show-error "$BASE/" | grep -q 'KUNDE Maps'
+home_page="$(mktemp)"
+trap 'rm -f "$home_page"' EXIT
+curl --fail --silent --show-error --output "$home_page" "$BASE/"
+grep -q 'KUNDE Maps' "$home_page"
 curl --fail --silent --show-error "$BASE/style.json" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["version"]==8'
 curl --fail --silent --show-error "$BASE/config.json" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["styleUrl"].startswith("http")'
 if [ -f data/tiles/kazakhstan.pmtiles ]; then
