@@ -330,8 +330,9 @@ const tests = {
     await page.locator('.chip[data-category=cafe]').click();
     await page.locator('#places-list li').first().waitFor();
     await page.locator('#theme').click();
-    await page.waitForFunction(() => window.__calls.styles.length > 0);
-    let style = (await calls(page)).styles.at(-1).style;
+    // Wait for the style produced by the theme switch itself: earlier setStyle calls (startup) carry no results yet.
+    await page.waitForFunction(() => window.__calls.styles.some(s => s.style.metadata && s.style.metadata['kunde:theme'] === 'dark'));
+    let style = (await calls(page)).styles.filter(s => s.style.metadata && s.style.metadata['kunde:theme'] === 'dark').at(-1).style;
     assert.equal(style.sources.places.cluster, true);
     assert.equal(style.sources.places.data.features.length, 3, 'latest results travel with the style');
     for (const id of ['places-clusters', 'places-cluster-count', 'places-points', 'places-selected']) assert.ok(style.layers.some(l => l.id === id), id);
