@@ -103,7 +103,7 @@
     function localizedStyle(base, code) {
       const style = JSON.parse(JSON.stringify(base));
       // Glyphs are fetched by web workers, which cannot resolve relative URLs: make the self-hosted path absolute.
-      if (typeof style.glyphs === 'string' && style.glyphs.startsWith('/')) style.glyphs = location.origin + style.glyphs;
+      if (typeof style.glyphs === 'string' && style.glyphs.startsWith('/')) style.glyphs = window.location.origin + style.glyphs;
       for (const layer of style.layers || []) {
         const template = layer.metadata && layer.metadata['kunde:text'];
         if (template && template[code]) layer.layout['text-field'] = template[code];
