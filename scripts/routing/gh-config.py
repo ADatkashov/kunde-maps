@@ -10,6 +10,11 @@ profiles = "  profiles:\n" + "".join(f"    - name: {n}\n      custom_model_files
 new, n = re.subn(r"(?ms)^  profiles:\n.*?(?=^  \S|\Z)", profiles + "\n", text, count=1)
 if n != 1:
     sys.exit("profiles block not found in config-example.yml")
+# speed-up (CH) preparation for every profile, as a production setup would use (RAM/time are part of the measurement)
+ch = "  profiles_ch:\n" + "".join(f"    - profile: {n}\n" for n in ("car", "foot", "bike"))
+new, n_ch = re.subn(r"(?ms)^  profiles_ch:\n.*?(?=^  \S|\Z)", ch + "\n", new, count=1)
+if n_ch != 1:
+    new = new.replace("\n  profiles:\n", "\n" + ch + "  profiles:\n", 1)
 # the example ignores footways/paths, which GraphHopper refuses to combine with the foot profile
 new = re.sub(r"(?m)^(\s*)import\.osm\.ignored_highways:.*$", r'\1import.osm.ignored_highways: ""', new)
 # routing needs encoded values the foot/bike models use; keep whatever the example declares and add missing ones
