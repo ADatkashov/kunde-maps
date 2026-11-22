@@ -124,7 +124,8 @@ const tests = {
     assert.match(await page.locator('#route-note').innerText(), /без учёта пробок/);
     const c = await calls(page);
     assert.equal(c.sources.filter(([id]) => id === 'route').at(-1)[1].features[0].geometry.coordinates.length, 3);
-    assert.ok(c.fit && c.fit[0][0][0] === 76.9456, 'camera fits the route');
+    await page.waitForFunction(() => window.__calls.fit);
+    assert.ok((await calls(page)).fit[0][0][0] === 76.9456, 'camera fits the route');
     await page.locator('#route-steps li').first().click();
     assert.equal((await calls(page)).flyTo.at(-1).center[0], 76.9456);
     await page.locator('.mode[data-mode=foot]').click();
@@ -227,6 +228,24 @@ const tests = {
     await page.locator('#route-from').fill('Ме');
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('#route-from-list').isHidden(), true);
+    await context.close();
+  },
+  async 'route: on a phone the steps start collapsed, the camera leaves room for the sheet and big touch targets are used'(browser) {
+    const {page, context} = await openPage(browser, {mobile: true, viewport: {width: 390, height: 844}, geo: {latitude: 43.2381, longitude: 76.9456}, routing: async () => ROUTE_REPLY});
+    await selectAlmaty(page);
+    await page.locator('#route-place').click();
+    await page.locator('#route-total').waitFor();
+    assert.equal(await page.evaluate(() => document.querySelector('#route-steps-wrap').open), false);
+    await page.waitForFunction(() => window.__calls.fit);
+    const fit = (await calls(page)).fit[1];
+    assert.ok(fit.padding.bottom > 100 && fit.padding.left <= 40, JSON.stringify(fit.padding));
+    for (const sel of ['.mode[data-mode=car]', '#route-swap', '#route-close', '#route-locate']) {
+      const box = await page.locator(sel).boundingBox();
+      assert.ok(box.width >= 40 && box.height >= 40, sel + ' touch target ' + JSON.stringify(box));
+    }
+    await page.locator('#route-steps-wrap > summary').click();
+    await page.locator('#route-steps li').first().waitFor();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, 'no horizontal scroll');
     await context.close();
   },
   async 'route: texts follow the language and a Kazakh UI says the directions are in Russian'(browser) {
