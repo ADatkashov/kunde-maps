@@ -108,7 +108,7 @@ class DeviceLocationSource implements LocationSource {
     bool navigation = false,
     bool vehicle = true,
     bool notification = true,
-  }) async* {
+  }) {
     final settings = !navigation || !notification
         ? LocationSettings(
             accuracy: navigation
@@ -117,17 +117,21 @@ class DeviceLocationSource implements LocationSource {
             distanceFilter: navigation ? 2 : 10,
           )
         : _navigationSettings(strings, vehicle);
-    try {
-      await for (final fix in Geolocator.getPositionStream(
-        locationSettings: settings,
-      )) {
-        yield _fix(fix);
-      }
-    } on PermissionDeniedException {
-      throw const LocationUnavailable();
-    } on LocationServiceDisabledException {
-      throw const LocationUnavailable();
-    }
+    // A plain transformer (not an async* generator) so that cancelling the
+    // subscription releases the platform location stream immediately.
+    return Geolocator.getPositionStream(locationSettings: settings).transform(
+      StreamTransformer<Position, LocationFix>.fromHandlers(
+        handleData: (position, sink) => sink.add(_fix(position)),
+        handleError: (error, stack, sink) {
+          if (error is PermissionDeniedException ||
+              error is LocationServiceDisabledException) {
+            sink.addError(const LocationUnavailable(), stack);
+          } else {
+            sink.addError(error, stack);
+          }
+        },
+      ),
+    );
   }
 
   static LocationFix _fix(Position p) => LocationFix(

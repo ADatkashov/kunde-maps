@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:kunde_maps_sdk/kunde_maps_sdk.dart';
@@ -87,7 +88,95 @@ class _FakeVoice implements VoiceGuide {
   Future<void> stop() async {}
 }
 
+class _FakeGps extends GeolocatorPlatform {
+  final fixes = StreamController<Position>.broadcast();
+  LocationPermission permission = LocationPermission.whileInUse;
+
+  @override
+  Future<bool> isLocationServiceEnabled() async => true;
+
+  @override
+  Future<LocationPermission> checkPermission() async => permission;
+
+  @override
+  Future<LocationPermission> requestPermission() async => permission;
+
+  @override
+  Stream<Position> getPositionStream({LocationSettings? locationSettings}) =>
+      fixes.stream;
+}
+
 void main() {
+  group('device location', () {
+    late GeolocatorPlatform previous;
+    late _FakeGps gps;
+    setUp(() {
+      previous = GeolocatorPlatform.instance;
+      gps = _FakeGps();
+      GeolocatorPlatform.instance = gps;
+    });
+    tearDown(() => GeolocatorPlatform.instance = previous);
+
+    Position fix(double lat, double lon) => Position(
+      latitude: lat,
+      longitude: lon,
+      timestamp: DateTime.now(),
+      accuracy: 5,
+      altitude: 0,
+      altitudeAccuracy: 0,
+      heading: 90,
+      headingAccuracy: 0,
+      speed: 3,
+      speedAccuracy: 0,
+    );
+
+    test(
+      'watch maps fixes and releases the platform stream on cancel',
+      () async {
+        final received = <LocationFix>[];
+        final sub = const DeviceLocationSource()
+            .watch(
+              strings: const MapsStrings('en'),
+              navigation: true,
+              notification: false,
+            )
+            .listen(received.add);
+        gps.fixes.add(fix(43.2, 76.9));
+        await Future<void>.delayed(Duration.zero);
+        expect(received.single.point, const GeoPoint(43.2, 76.9));
+        expect(received.single.heading, 90);
+        expect(received.single.speed, 3);
+        // Not awaited: the GPS must stop at once, not on a later microtask.
+        unawaited(sub.cancel());
+        expect(gps.fixes.hasListener, isFalse);
+      },
+    );
+
+    test(
+      'access reports denial and a revoked permission ends the stream with LocationUnavailable',
+      () async {
+        gps.permission = LocationPermission.deniedForever;
+        expect(
+          await const DeviceLocationSource().access(),
+          GpsAccess.deniedForever,
+        );
+        expect(await const DeviceLocationSource().current(), isNull);
+        final errors = <Object>[];
+        final sub = const DeviceLocationSource()
+            .watch(
+              strings: const MapsStrings('en'),
+              navigation: true,
+              notification: false,
+            )
+            .listen((_) {}, onError: errors.add);
+        gps.fixes.addError(const PermissionDeniedException('revoked'));
+        await Future<void>.delayed(Duration.zero);
+        expect(errors.single, isA<LocationUnavailable>());
+        await sub.cancel();
+      },
+    );
+  });
+
   group('configuration', () {
     test('rejects non-HTTPS, credentialed and unknown-language setups', () {
       expect(
