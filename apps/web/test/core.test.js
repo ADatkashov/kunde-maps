@@ -384,3 +384,16 @@ test('durations are formatted per language', () => {
   assert.equal(core.formatDuration(NaN, 'ru'), '');
   for (const lang of core.LANGS) for (const key of ['routeTitle', 'modeCar', 'routeNoRoute', 'routeOutside', 'routeNote', 'routeFailed']) assert.ok(core.t(lang, key), lang + key);
 });
+
+test('route replies carry validated alternatives and the data version', async () => {
+  const alt = routeBody({distance_m: 4200, duration_s: 600});
+  const c = routes(async (url) => json(200, routeBody({alternatives: [alt, {mode: 'car', distance_m: -5}, null], data_version: 'osm-261121'})));
+  const route = await c.route({from: {lat: 43, lon: 76}, to: {lat: 44, lon: 77}, alternatives: true});
+  assert.equal(route.alternatives.length, 1);  // malformed alternatives are dropped, not shown
+  assert.equal(route.alternatives[0].distance, 4200);
+  assert.deepEqual(route.alternatives[0].alternatives, []);
+  assert.equal(route.dataVersion, 'osm-261121');
+  const urls = [];
+  await routes(async (url) => { urls.push(url); return json(200, routeBody()); }).route({from: {lat: 43, lon: 76}, to: {lat: 44, lon: 77}, alternatives: true});
+  assert.match(urls[0], /&alternatives=1$/);
+});

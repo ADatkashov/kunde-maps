@@ -38,6 +38,7 @@
       routeNoRoute: 'Маршрут не найден', routeNoRoad: 'Рядом с точкой нет дороги подходящего типа', routeOutside: 'Маршруты доступны только по Казахстану',
       routeTooLong: 'Слишком длинный маршрут для этого вида транспорта', routeFailed: 'Не удалось построить маршрут', routeTooClose: 'Начало и конец совпадают',
       routeNeedStart: 'Укажите начало маршрута', routeExternal: 'Открыть в OpenStreetMap', routeSwap: 'Поменять местами', routeStart: 'Начало', routeEnd: 'Конец',
+      routeAlt: 'Варианты маршрута', routeFastest: 'Быстрее всего', routeVariant: 'Вариант {n}', routeSearchPlaceholder: 'Адрес или место', routeUseMyLocation: 'Моё местоположение', routeSuggestions: 'Подсказки',
       hourShort: 'ч', minuteShort: 'мин',
       favorites: 'Сохранённые', favoritesEmpty: 'Пока ничего не сохранено. Нажмите «Сохранить» в карточке места.',
       favoritesNote: 'Хранится только на этом устройстве', remove: 'Удалить', savedToast: 'Добавлено в сохранённые', removedToast: 'Удалено из сохранённых',
@@ -70,6 +71,7 @@
       routeNoRoute: 'Маршрут табылмады', routeNoRoad: 'Нүктенің маңында қолайлы жол жоқ', routeOutside: 'Маршруттар тек Қазақстан бойынша қолжетімді',
       routeTooLong: 'Бұл көлік түріне маршрут тым ұзақ', routeFailed: 'Маршрутты құру мүмкін болмады', routeTooClose: 'Бастапқы және соңғы нүкте сәйкес келеді',
       routeNeedStart: 'Маршрут басын көрсетіңіз', routeExternal: 'OpenStreetMap-та ашу', routeSwap: 'Орындарын ауыстыру', routeStart: 'Басы', routeEnd: 'Соңы',
+      routeAlt: 'Маршрут нұсқалары', routeFastest: 'Ең жылдам', routeVariant: '{n}-нұсқа', routeSearchPlaceholder: 'Мекенжай немесе орын', routeUseMyLocation: 'Менің орным', routeSuggestions: 'Ұсыныстар',
       hourShort: 'сағ', minuteShort: 'мин',
       favorites: 'Сақталғандар', favoritesEmpty: 'Әзірге ештеңе сақталмаған. Орын карточкасында «Сақтау» түймесін басыңыз.',
       favoritesNote: 'Тек осы құрылғыда сақталады', remove: 'Жою', savedToast: 'Сақталғандарға қосылды', removedToast: 'Сақталғандардан жойылды',
@@ -102,6 +104,7 @@
       routeNoRoute: 'No route found', routeNoRoad: 'No suitable road near the point', routeOutside: 'Routes are available in Kazakhstan only',
       routeTooLong: 'This route is too long for the selected mode', routeFailed: 'Could not build the route', routeTooClose: 'Start and end are the same',
       routeNeedStart: 'Set the start of the route', routeExternal: 'Open in OpenStreetMap', routeSwap: 'Swap', routeStart: 'Start', routeEnd: 'End',
+      routeAlt: 'Route options', routeFastest: 'Fastest', routeVariant: 'Option {n}', routeSearchPlaceholder: 'Address or place', routeUseMyLocation: 'My location', routeSuggestions: 'Suggestions',
       hourShort: 'h', minuteShort: 'min',
       favorites: 'Saved places', favoritesEmpty: 'Nothing saved yet. Tap “Save” on a place card.',
       favoritesNote: 'Stored on this device only', remove: 'Remove', savedToast: 'Added to saved places', removedToast: 'Removed from saved places',
@@ -439,7 +442,10 @@
         lon: Number(step.location[0]), lat: Number(step.location[1])});
     }
     const bbox = Array.isArray(body.bbox) && body.bbox.length === 4 && body.bbox.every(Number.isFinite) ? body.bbox : null;
-    return {mode: body.mode, distance, duration, coordinates: coords.map(c => [Number(c[0]), Number(c[1])]), steps, bbox,
+    const alternatives = (Array.isArray(body.alternatives) && !body.isAlternative ? body.alternatives.slice(0, 3) : [])
+      .map(alt => validRoute({...alt, mode: body.mode, isAlternative: true, instruction_language: body.instruction_language})).filter(Boolean);
+    return {mode: body.mode, distance, duration, coordinates: coords.map(c => [Number(c[0]), Number(c[1])]), steps, bbox, alternatives,
+      dataVersion: typeof body.data_version === 'string' ? body.data_version.slice(0, 60) : '',
       narrationLang: ['ru', 'kk', 'en'].includes(body.instruction_language) ? body.instruction_language : 'ru'};
   }
 
@@ -449,10 +455,10 @@
     const getJson = createFetcher({retries: 0, ...options});
     const point = p => p.lat.toFixed(5) + ',' + p.lon.toFixed(5);
     return {
-      async route({from, to, mode = 'car', lang = 'ru', signal, onSlow}) {
+      async route({from, to, mode = 'car', lang = 'ru', alternatives = false, signal, onSlow}) {
         if (!baseUrl) throw new SearchError('not_configured');
         if (!ROUTE_MODES.includes(mode) || !from || !to || ![from.lat, from.lon, to.lat, to.lon].every(Number.isFinite)) throw new SearchError('bad_request');
-        const body = await getJson(baseUrl + '/v1/route?from=' + point(from) + '&to=' + point(to) + '&mode=' + mode + '&lang=' + lang, {signal, onSlow});
+        const body = await getJson(baseUrl + '/v1/route?from=' + point(from) + '&to=' + point(to) + '&mode=' + mode + '&lang=' + lang + (alternatives ? '&alternatives=1' : ''), {signal, onSlow});
         const route = validRoute(body);
         if (!route) throw new SearchError('invalid_response');
         return route;

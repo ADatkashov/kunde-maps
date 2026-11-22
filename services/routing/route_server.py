@@ -27,6 +27,8 @@ ALLOWED_ORIGINS = {"https://kunde-maps-web-dev.onrender.com"}
 # Kazakhstan bounding box (the graph covers the country only): reject everything else early with a clear error.
 BBOX = (46.4, 40.5, 87.4, 55.6)  # min_lon, min_lat, max_lon, max_lat
 MIN_DISTANCE_M = 10
+MAX_BODY = 2048
+API_MODES = {"driving": "car", "walking": "foot", "cycling": "bike"}  # POST /v1/routes vocabulary
 MODES = {"car": "auto", "foot": "pedestrian", "bike": "bicycle"}
 LANGUAGES = {"ru": "ru-RU", "kk": "ru-RU", "en": "en-US"}  # Valhalla has no Kazakh narrative: kk falls back to Russian (reported in the reply)
 RATE_PER_MINUTE = env_int(os.environ, "MAPS_RATE_LIMIT_PER_MINUTE", 60, 1, 100000)
@@ -34,6 +36,8 @@ RATE_BURST = env_int(os.environ, "MAPS_RATE_LIMIT_BURST", 20, 1, 10000)
 MAX_CONCURRENT = env_int(os.environ, "MAPS_MAX_CONCURRENT_ROUTES", 6, 1, 64)
 TRUSTED_HOPS = env_int(os.environ, "MAPS_TRUSTED_PROXY_HOPS", 1, 0, 5)
 METRICS_TOKEN = os.environ.get("MAPS_METRICS_TOKEN", "")
+MAX_ALTERNATIVES = 2
+DATA_VERSION = os.environ.get("MAPS_ROUTING_DATA_VERSION", "unknown")  # e.g. the graph build id / OSM extract date, set by the deployer
 SIMPLIFY_TOLERANCE_DEG = 0.00004  # ~4 m: invisible on a map, cuts long routes by an order of magnitude
 ATTRIBUTION = "© OpenStreetMap contributors (ODbL)"
 NOTE = "Typical travel time from OpenStreetMap speed data; no traffic, closures or live conditions."
@@ -98,35 +102,45 @@ def valhalla_request(payload):
         raise RouteError(502, "routing_unavailable") from None
 
 
-def route(origin, destination, mode, lang):
+def normalize_trip(trip, mode, lang):
+    leg = trip["legs"][0]
+    points = polyline.decode(leg["shape"])
+    kept = polyline.simplify(points, SIMPLIFY_TOLERANCE_DEG)
+    steps = []
+    for m in leg.get("maneuvers", []):
+        idx = int(m.get("begin_shape_index", 0))
+        if not 0 <= idx < len(points):
+            continue
+        lat, lon = points[idx]
+        steps.append({"instruction": str(m.get("instruction", ""))[:300], "type": int(m.get("type", 0)),
+                      "street": (m.get("street_names") or [""])[0][:120], "distance_m": round(float(m.get("length", 0)) * 1000),
+                      "duration_s": round(float(m.get("time", 0))), "location": [round(lon, 6), round(lat, 6)]})
+    summary = trip["summary"]
+    lons = [p[1] for p in points]
+    lats = [p[0] for p in points]
+    return {
+        "mode": mode, "distance_m": round(float(summary["length"]) * 1000), "duration_s": round(float(summary["time"])),
+        "geometry": {"type": "LineString", "coordinates": [[round(points[i][1], 6), round(points[i][0], 6)] for i in kept]},
+        "bbox": [min(lons), min(lats), max(lons), max(lats)], "steps": steps,
+        "start": [round(points[0][1], 6), round(points[0][0], 6)], "end": [round(points[-1][1], 6), round(points[-1][0], 6)],
+    }
+
+
+def route(origin, destination, mode, lang, alternatives=False):
     payload = {"locations": [{"lat": origin[0], "lon": origin[1]}, {"lat": destination[0], "lon": destination[1]}],
                "costing": MODES[mode], "units": "kilometers", "language": LANGUAGES[lang], "directions_type": "instructions"}
+    if alternatives:
+        payload["alternates"] = MAX_ALTERNATIVES
     data = valhalla_request(payload)
     try:
-        trip = data["trip"]
-        leg = trip["legs"][0]
-        points = polyline.decode(leg["shape"])
-        kept = polyline.simplify(points, SIMPLIFY_TOLERANCE_DEG)
-        steps = []
-        for m in leg.get("maneuvers", []):
-            idx = int(m.get("begin_shape_index", 0))
-            if not 0 <= idx < len(points):
-                continue
-            lat, lon = points[idx]
-            steps.append({"instruction": str(m.get("instruction", ""))[:300], "type": int(m.get("type", 0)),
-                          "street": (m.get("street_names") or [""])[0][:120], "distance_m": round(float(m.get("length", 0)) * 1000),
-                          "duration_s": round(float(m.get("time", 0))), "location": [round(lon, 6), round(lat, 6)]})
-        summary = trip["summary"]
-        lons = [p[1] for p in points]
-        lats = [p[0] for p in points]
-        return {
-            "mode": mode, "distance_m": round(float(summary["length"]) * 1000), "duration_s": round(float(summary["time"])),
-            "geometry": {"type": "LineString", "coordinates": [[round(points[i][1], 6), round(points[i][0], 6)] for i in kept]},
-            "bbox": [min(lons), min(lats), max(lons), max(lats)], "steps": steps,
-            "instruction_language": "ru" if lang == "kk" else lang, "note": NOTE, "attribution": ATTRIBUTION, "engine": "valhalla",
-        }
+        result = normalize_trip(data["trip"], mode, lang)
+        extra = [normalize_trip(alt["trip"], mode, lang) for alt in (data.get("alternates") or [])[:MAX_ALTERNATIVES]] if alternatives else []
     except (KeyError, IndexError, TypeError, ValueError):
         raise RouteError(502, "routing_unavailable") from None
+    result["alternatives"] = extra
+    result.update({"instruction_language": "ru" if lang == "kk" else lang, "note": NOTE, "attribution": ATTRIBUTION, "engine": "valhalla",
+                   "data_version": DATA_VERSION})
+    return result
 
 
 def valhalla_ready():
@@ -174,6 +188,15 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path != "/v1/route":
             self.reply(404, {"error": "not_found"})
             return "other"
+        if not self._admit():
+            return "route"
+        params = parse_qs(parsed.query)
+        return self._route_request(
+            params.get("from", [""])[0], params.get("to", [""])[0], params.get("mode", ["car"])[0], params.get("lang", ["ru"])[0],
+            params.get("alternatives", ["0"])[0] in ("1", "true"))
+
+    def _admit(self):
+        """API key or per-IP quota. Replies 401/429 and returns False when the request must not proceed."""
         ip = client_ip(self.headers.get("X-Forwarded-For"), self.client_address[0], TRUSTED_HOPS)
         presented = self.headers.get("X-API-Key")
         if presented is not None:
@@ -181,7 +204,7 @@ class Handler(BaseHTTPRequestHandler):
             if key is None:
                 METRICS.incr("invalid_keys")
                 self.reply(401, {"error": "invalid_api_key"})
-                return "route"
+                return False
             METRICS.key_used(key[0])
             allowed, retry = KEY_LIMITERS[key[0]].check(key[0])
         else:
@@ -189,13 +212,61 @@ class Handler(BaseHTTPRequestHandler):
         if not allowed:
             METRICS.incr("rate_limited")
             self.reply(429, {"error": "rate_limited", "retry_after": retry}, {"Retry-After": str(retry)})
-            return "route"
-        params = parse_qs(parsed.query)
+            return False
+        return True
+
+    def do_POST(self):
+        started = time.perf_counter()
+        route_name = "other"
         try:
-            origin = parse_point(params.get("from", [""])[0], "from")
-            destination = parse_point(params.get("to", [""])[0], "to")
-            mode = params.get("mode", ["car"])[0]
-            lang = params.get("lang", ["ru"])[0]
+            route_name = self._post()
+        finally:
+            elapsed = time.perf_counter() - started
+            METRICS.observe(route_name, self._code, elapsed)
+            print(json.dumps({"route": route_name, "status": self._code, "ms": round(elapsed * 1000, 1)}), flush=True)
+
+    def _post(self):
+        """POST /v1/routes  {origin:{lat,lon}, destination:{lat,lon}, mode: driving|walking|cycling, alternatives, language}"""
+        if urlparse(self.path).path != "/v1/routes":
+            self.reply(404, {"error": "not_found"})
+            return "other"
+        if not self._admit():
+            return "route"
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = -1
+        if not 0 < length <= MAX_BODY:
+            self.reply(413 if length > MAX_BODY else 400, {"error": "body_must_be_1_to_2048_bytes"})
+            return "route"
+        try:
+            body = json.loads(self.rfile.read(length))
+            if not isinstance(body, dict):
+                raise ValueError
+            ends = []
+            for name in ("origin", "destination"):
+                point = body.get(name)
+                if not isinstance(point, dict) or isinstance(point.get("lat"), bool) or isinstance(point.get("lon"), bool):
+                    raise RouteError(400, f"{'from' if name == 'origin' else 'to'}_must_be_lat,lon")
+                ends.append(f"{point.get('lat')},{point.get('lon')}")
+            mode = API_MODES.get(body.get("mode", "driving"))
+            if mode is None:
+                raise RouteError(400, "mode_must_be_driving_walking_or_cycling")
+            lang = body.get("language", "ru")
+            if not isinstance(lang, str):
+                raise RouteError(400, "lang_must_be_ru_kk_or_en")
+        except RouteError as err:
+            self.reply(err.status, {"error": err.code})
+            return "route"
+        except (ValueError, UnicodeDecodeError):
+            self.reply(400, {"error": "invalid_json"})
+            return "route"
+        return self._route_request(ends[0], ends[1], mode, lang, body.get("alternatives") is True)
+
+    def _route_request(self, origin_text, destination_text, mode, lang, alternatives):
+        try:
+            origin = parse_point(origin_text, "from")
+            destination = parse_point(destination_text, "to")
             if mode not in MODES:
                 raise RouteError(400, "mode_must_be_car_foot_or_bike")
             if lang not in LANGUAGES:
@@ -203,7 +274,7 @@ class Handler(BaseHTTPRequestHandler):
             if haversine_m(origin, destination) < MIN_DISTANCE_M:
                 raise RouteError(400, "points_too_close")
             with GATE:
-                result = route(origin, destination, mode, lang)
+                result = route(origin, destination, mode, lang, alternatives)
             self.reply(200, result)
         except RouteError as err:
             self.reply(err.status, {"error": err.code, **err.extra}, {"Retry-After": "5"} if err.status == 502 else None)

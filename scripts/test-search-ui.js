@@ -41,8 +41,8 @@ const MOCK_MAPLIBRE = `(function () {
   class Marker {
     constructor(o) { this.el = o && o.element; }
     setLngLat(l) { this.ll = l; return this; }
-    addTo() { window.__calls.markers.push(this.ll); return this; }
-    remove() { window.__calls.removed++; }
+    addTo() { window.__calls.markers.push(this.ll); if (this.el) document.body.append(this.el); return this; }
+    remove() { window.__calls.removed++; if (this.el) this.el.remove(); }
   }
   window.maplibregl = {addProtocol() {}, Map, Marker, NavigationControl: class {}};
 })();
@@ -114,11 +114,11 @@ const tests = {
     await selectAlmaty(page);
     await page.locator('#route-place').click();
     await page.locator('#route-steps li').first().waitFor();
-    assert.equal(routeRequests[0], '/v1/route?from=43.23812,76.94568&to=43.23640,76.94570&mode=car&lang=ru');  // 5 decimals, our API only
+    assert.equal(routeRequests[0], '/v1/route?from=43.23812,76.94568&to=43.23640,76.94570&mode=car&lang=ru&alternatives=1');  // 5 decimals, our API only
     assert.equal(await page.locator('#route-panel').isVisible(), true);
     assert.equal(await page.locator('#selection').isHidden(), true);
-    assert.equal(await page.locator('#route-from').innerText(), 'Моё местоположение');
-    assert.equal(await page.locator('#route-to').innerText(), 'Алматы');
+    assert.equal(await page.locator('#route-from').inputValue(), 'Моё местоположение');
+    assert.equal(await page.locator('#route-to').inputValue(), 'Алматы');
     assert.equal(await page.locator('#route-total').innerText(), '3.5 км · 5 мин');
     assert.equal(await page.locator('#route-steps li').count(), 2);
     assert.match(await page.locator('#route-note').innerText(), /без учёта пробок/);
@@ -142,16 +142,18 @@ const tests = {
     const {page, context, routeRequests} = await openPage(browser, {routing: async () => ROUTE_REPLY});
     await selectAlmaty(page);
     await page.locator('#route-place').click();
-    await page.locator('#route-state').filter({hasText: 'Нажмите на карту'}).waitFor();
+    await page.locator('#route-state').filter({hasText: 'Разрешите доступ'}).waitFor();  // device position refused: say so, let the user choose
     assert.equal(routeRequests.length, 0, 'nothing is requested before a start exists');
+    await page.locator('#route-pick').click();
+    await page.locator('#route-state').filter({hasText: 'Нажмите на карту'}).waitFor();
     assert.equal(await page.evaluate(() => document.body.classList.contains('picking-start')), true);
     await page.evaluate(() => window.__map.fire('click', {lngLat: {lat: 43.25, lng: 76.95}, point: {x: 5, y: 5}}));
     await page.locator('#route-steps li').first().waitFor();
     assert.match(routeRequests[0], /^\/v1\/route\?from=43\.25000,76\.95000&to=43\.23640,76\.94570/);
-    assert.equal(await page.locator('#route-from').innerText(), '43.25000, 76.95000');
+    assert.equal(await page.locator('#route-from').inputValue(), '43.25000, 76.95000');
     assert.equal(await page.locator('#selection').isHidden(), true, 'the map click set the start instead of opening a point card');
     await page.locator('#route-swap').click();
-    await page.waitForFunction(() => document.querySelector('#route-from').textContent === 'Алматы');
+    await page.waitForFunction(() => document.querySelector('#route-from').value === 'Алматы');
     assert.match(routeRequests.at(-1), /from=43\.23640,76\.94570&to=43\.25000,76\.95000/);
     await context.close();
   },
@@ -175,6 +177,56 @@ const tests = {
       await page.waitForTimeout(50);
     }
     assert.match(await page.locator('#route-external').getAttribute('href'), /openstreetmap\.org\/directions\?from=&to=43\.2364/);
+    await context.close();
+  },
+  async 'route: alternatives are listed, drawn as active/inactive lines and selectable; A and B pins follow the points'(browser) {
+    const alt = {...ROUTE_REPLY, distance_m: 4200, duration_s: 600, geometry: {type: 'LineString', coordinates: [[76.9456, 43.238], [76.96, 43.245], [76.9567, 43.261]]}};
+    const {page, context, routeRequests} = await openPage(browser, {geo: {latitude: 43.2381, longitude: 76.9456}, routing: async () => ({...ROUTE_REPLY, alternatives: [alt], data_version: 'osm-261121'})});
+    await selectAlmaty(page);
+    await page.locator('#route-place').click();
+    await page.locator('#route-options li').nth(1).waitFor();
+    assert.match(routeRequests[0], /alternatives=1/);
+    assert.equal(await page.locator('#route-options li').count(), 2);
+    assert.match(await page.locator('#route-options li').nth(0).innerText(), /5 мин[\s\S]*Быстрее всего/);
+    assert.match(await page.locator('#route-options li').nth(1).innerText(), /10 мин[\s\S]*Вариант 2/);
+    let features = (await calls(page)).sources.filter(([id]) => id === 'route').at(-1)[1].features;
+    assert.deepEqual(features.map(f => f.properties.active), [true, false]);
+    await page.locator('#route-options li').nth(1).click();
+    assert.equal(await page.locator('#route-total').innerText(), '4.2 км · 10 мин');
+    features = (await calls(page)).sources.filter(([id]) => id === 'route').at(-1)[1].features;
+    assert.deepEqual(features.map(f => f.properties.active), [false, true]);
+    assert.equal(routeRequests.length, 1, 'choosing an option does not hit the API again');
+    const style = (await calls(page)).styles.length ? (await calls(page)).styles.at(-1).style : await page.evaluate(() => window.__map.o.style);
+    assert.ok(style.layers.some(l => l.id === 'route-alt') && style.layers.some(l => l.id === 'route-line'));
+    assert.equal(await page.locator('.route-pin').count(), 2);
+    assert.deepEqual(await page.locator('.route-pin').allInnerTexts(), ['A', 'B']);
+    await page.locator('#route-close').click();
+    assert.equal(await page.locator('.route-pin').count(), 0);
+    await context.close();
+  },
+  async 'route: both ends can be typed with suggestions (keyboard) and edits recompute the route'(browser) {
+    const hits = [place(5, 'Парк Горького', 'park', 43.2552, 76.9576), place(6, 'Медеу', 'attraction', 43.1575, 77.0589, {locality: 'Алматы'})];
+    const {page, context, routeRequests} = await openPage(browser, {geo: {latitude: 43.2381, longitude: 76.9456}, routing: async () => ROUTE_REPLY,
+      handler: async q => ({results: q && q.startsWith('Ме') ? [hits[1]] : q && q.startsWith('Пар') ? [hits[0]] : [ALMATY]})});
+    await selectAlmaty(page);
+    await page.locator('#route-place').click();
+    await page.locator('#route-steps li').first().waitFor();
+    await page.locator('#route-to').fill('Ме');
+    await page.locator('#route-to-list li').first().waitFor();
+    assert.match(await page.locator('#route-to-list li').first().innerText(), /Медеу[\s\S]*Алматы/);
+    assert.equal(await page.locator('#route-to').getAttribute('aria-expanded'), 'true');
+    await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
+    await page.waitForFunction(() => document.querySelector('#route-to').value === 'Медеу');
+    await page.locator('#route-steps li').first().waitFor();
+    assert.match(routeRequests.at(-1), /from=43\.23810,76\.94560&to=43\.15750,77\.05890/);
+    await page.locator('#route-from').fill('Пар');
+    await page.locator('#route-from-list li').first().click();
+    await page.waitForFunction(() => document.querySelector('#route-from').value === 'Парк Горького');
+    await page.waitForFunction(() => document.querySelectorAll('#route-steps li').length > 0);
+    assert.match(routeRequests.at(-1), /from=43\.25520,76\.95760&to=43\.15750,77\.05890/);
+    await page.locator('#route-from').fill('Ме');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#route-from-list').isHidden(), true);
     await context.close();
   },
   async 'route: texts follow the language and a Kazakh UI says the directions are in Russian'(browser) {

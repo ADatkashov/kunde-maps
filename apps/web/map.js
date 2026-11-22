@@ -89,7 +89,9 @@
       style.layers.push(
         {id: 'route-casing', type: 'line', source: 'route', layout: {'line-cap': 'round', 'line-join': 'round'}, paint: {
           'line-color': stroke, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 5, 16, 12], 'line-opacity': 0.9}},
-        {id: 'route-line', type: 'line', source: 'route', layout: {'line-cap': 'round', 'line-join': 'round'}, paint: {
+        {id: 'route-alt', type: 'line', source: 'route', filter: ['==', ['get', 'active'], false], layout: {'line-cap': 'round', 'line-join': 'round'}, paint: {
+          'line-color': dark ? '#94a3b8' : '#64748b', 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2, 16, 6], 'line-opacity': 0.85}},
+        {id: 'route-line', type: 'line', source: 'route', filter: ['==', ['get', 'active'], true], layout: {'line-cap': 'round', 'line-join': 'round'}, paint: {
           'line-color': dark ? '#7aa2f7' : '#2563eb', 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.5, 16, 7]}});
       style.sources.places = {type: 'geojson', data: placesData, cluster: true, clusterRadius: 46, clusterMaxZoom: 15};
       style.layers.push(
@@ -902,32 +904,49 @@
     $('locate').addEventListener('click', () => locate());
 
     // ---- routing (Phase 4) -------------------------------------------------------------------------------------
-    // The start defaults to the device position (used for this one request only, sent to our routing API, never stored or logged);
-    // when it is unavailable the user taps the map. Without a configured routing API the button stays an external OpenStreetMap link.
+    // Both ends are editable (type an address/place, use the device position once, or tap the map). The device position is used for the one
+    // request only (sent to our routing API, never stored or logged). Without a configured routing API the button stays an external link.
     const routeClient = routingBase ? core.createRouteClient({baseUrl: routingBase}) : null;
-    let routeFrom = null, routeDest = null, routeMode = 'car', routeAbort = null, pickingStart = false;
-    const routeStateEl = $('route-state'), routeStepsEl = $('route-steps'), routeSummaryEl = $('route-summary');
+    let routeFrom = null, routeDest = null, routeMode = 'car', routeAbort = null, pickingStart = false, routes = [], routeActive = 0, pinFrom = null, pinTo = null;
+    const routeStateEl = $('route-state'), routeStepsEl = $('route-steps'), routeSummaryEl = $('route-summary'), routeOptionsEl = $('route-options');
+    const fromInput = $('route-from'), toInput = $('route-to');
 
-    function setRouteData(coords) {
-      routeData = {type: 'FeatureCollection', features: coords ? [{type: 'Feature', properties: {}, geometry: {type: 'LineString', coordinates: coords}}] : []};
+    function setRouteData(list, active) {
+      routeData = {type: 'FeatureCollection', features: (list || []).map((r, i) => ({type: 'Feature', properties: {active: i === active},
+        geometry: {type: 'LineString', coordinates: r.coordinates}}))};
       const source = map.getSource && map.getSource('route');
       if (source && source.setData) source.setData(routeData);
     }
+    function pinElement(letter, cls) {
+      const el = document.createElement('div'); el.className = 'route-pin ' + cls;
+      const span = document.createElement('span'); span.textContent = letter; el.append(span);
+      return el;
+    }
+    function updatePins() {
+      for (const [pin, point, letter, cls] of [[pinFrom, routeFrom, 'A', 'a'], [pinTo, routeDest, 'B', 'b']]) if (pin) pin.remove();
+      pinFrom = pinTo = null;
+      if (!routeOpen) return;
+      if (routeFrom) pinFrom = new maplibregl.Marker({element: pinElement('A', 'a'), anchor: 'bottom'}).setLngLat([routeFrom.lon, routeFrom.lat]).addTo(map);
+      if (routeDest) pinTo = new maplibregl.Marker({element: pinElement('B', 'b'), anchor: 'bottom'}).setLngLat([routeDest.lon, routeDest.lat]).addTo(map);
+    }
     const pointLabel = p => !p ? '' : p.kind === 'me' ? tr('myLocation') : p.kind === 'place' ? p.title : core.formatCoords(p.lat, p.lon);
-    function renderRouteLabels() {
+    function renderRouteLabels(force) {
       $('route-title').textContent = tr('routeTitle');
       $('route-from-label').textContent = tr('routeStart');
       $('route-to-label').textContent = tr('routeEnd');
       $('route-close').setAttribute('aria-label', tr('routeClose'));
-      $('route-pick').textContent = tr('pickOnMap');
-      $('route-swap').textContent = tr('routeSwap');
+      $('route-pick').setAttribute('aria-label', tr('pickOnMap')); $('route-pick').title = tr('pickOnMap');
+      $('route-locate').setAttribute('aria-label', tr('routeUseMyLocation')); $('route-locate').title = tr('routeUseMyLocation');
+      $('route-swap').setAttribute('aria-label', tr('routeSwap')); $('route-swap').title = tr('routeSwap');
       routeStepsEl.setAttribute('aria-label', tr('routeSteps'));
+      routeOptionsEl.setAttribute('aria-label', tr('routeAlt'));
       $('route-note').textContent = tr('routeNote');
       for (const button of document.querySelectorAll('#route-modes .mode')) button.textContent = tr({car: 'modeCar', foot: 'modeFoot', bike: 'modeBike'}[button.dataset.mode]);
-      const from = $('route-from');
-      from.textContent = routeFrom ? pointLabel(routeFrom) : tr('routeNeedStart');
-      from.classList.toggle('pending', !routeFrom);
-      $('route-to').textContent = pointLabel(routeDest);
+      for (const [input, point] of [[fromInput, routeFrom], [toInput, routeDest]]) {
+        if (force || document.activeElement !== input) input.value = pointLabel(point);
+        input.placeholder = point ? '' : tr('routeSearchPlaceholder');
+      }
+      if (!routeFrom && document.activeElement !== fromInput) fromInput.placeholder = tr('routeNeedStart');
       $('route-external').textContent = tr('routeExternal');
     }
     function showRouteState(kind, text, extra) {
@@ -942,41 +961,100 @@
     function setPickingStart(on) {
       pickingStart = on;
       document.body.classList.toggle('picking-start', on);
+      $('route-pick').setAttribute('aria-pressed', String(on));
       if (on) { showRouteState('info', tr('pickHint')); setStatus(tr('pickHint')); }
     }
-    function resetRouteResult() {
+    function resetRouteResult(keepPins) {
       routeSummaryEl.hidden = true; routeStepsEl.hidden = true; routeStepsEl.replaceChildren();
+      routeOptionsEl.hidden = true; routeOptionsEl.replaceChildren();
       $('route-external').hidden = true;
-      setRouteData(null);
+      routes = []; routeActive = 0;
+      setRouteData(null, 0);
+      if (!keepPins) updatePins();
     }
-    function openRoute() {
-      if (!selected || !routeClient) return;
-      routeDest = {lat: selected.lat, lon: selected.lon, kind: 'place', title: selected.title};
-      routeFrom = null; routeOpen = true; card.hidden = true;
-      resetRouteResult(); renderRouteLabels(); refreshSheetVisibility(); setExpanded(false);
+
+    // Address/place suggestions for both ends (our Search API; the typed text never leaves for any third party).
+    function attachSuggest(input, list, onPick) {
+      let timer = null, abort = null, shown = [], active = -1;
+      const hide = () => { list.hidden = true; list.replaceChildren(); shown = []; active = -1; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); };
+      const choose = index => { const raw = shown[index]; if (!raw) return; hide(); onPick(raw); };
+      const mark = () => {
+        [...list.children].forEach((li, i) => li.setAttribute('aria-selected', String(i === active)));
+        if (active >= 0) input.setAttribute('aria-activedescendant', list.children[active].id); else input.removeAttribute('aria-activedescendant');
+      };
+      input.addEventListener('input', () => {
+        clearTimeout(timer);
+        if (abort) abort.abort();
+        const text = input.value;
+        if (!client || !core.isSearchable(text)) { hide(); return; }
+        timer = setTimeout(() => {
+          abort = new AbortController();
+          const mine = abort;
+          const c = map.getCenter();
+          client.search(text, {limit: 5, lang, center: {lat: c.lat, lng: c.lng}, signal: mine.signal}).then(found => {
+            if (mine !== abort || document.activeElement !== input) return;
+            shown = found; list.replaceChildren(); active = -1;
+            found.forEach((raw, i) => {
+              const li = document.createElement('li'); li.setAttribute('role', 'option'); li.id = list.id + '-' + i; li.setAttribute('aria-selected', 'false');
+              const name = document.createElement('span'); name.textContent = core.displayName(raw, lang);
+              const small = document.createElement('small'); small.textContent = core.kindLabel(raw.kind, lang) + (raw.locality ? ' · ' + raw.locality : '');
+              li.append(name, small);
+              li.addEventListener('mousedown', e => { e.preventDefault(); choose(i); });
+              list.append(li);
+            });
+            list.hidden = !found.length;
+            input.setAttribute('aria-expanded', String(Boolean(found.length)));
+          }).catch(() => {});
+        }, 280);
+      });
+      input.addEventListener('keydown', e => {
+        if (e.key === 'ArrowDown' && shown.length) { e.preventDefault(); active = (active + 1) % shown.length; mark(); }
+        else if (e.key === 'ArrowUp' && shown.length) { e.preventDefault(); active = (active - 1 + shown.length) % shown.length; mark(); }
+        else if (e.key === 'Enter' && shown.length) { e.preventDefault(); choose(active >= 0 ? active : 0); }
+        else if (e.key === 'Escape' && !list.hidden) { e.preventDefault(); hide(); }
+      });
+      input.addEventListener('focus', () => input.select());
+      input.addEventListener('blur', () => { setTimeout(hide, 120); renderRouteLabels(); });
+    }
+    const pickToPoint = raw => ({lat: raw.lat, lon: raw.lon, kind: 'place', title: core.displayName(raw, lang) || tr('place')});
+    attachSuggest(fromInput, $('route-from-list'), raw => { routeFrom = pickToPoint(raw); afterPointsChanged(); });
+    attachSuggest(toInput, $('route-to-list'), raw => { routeDest = pickToPoint(raw); afterPointsChanged(); });
+    function afterPointsChanged() { renderRouteLabels(true); updatePins(); buildRoute(); }
+
+    function useMyLocation() {
       if (!navigator.geolocation) { setPickingStart(true); return; }
       showRouteState('loading', tr('locating'));
       navigator.geolocation.getCurrentPosition(({coords: position}) => {
         if (!routeOpen) return;
         setRouteStart({lat: position.latitude, lon: position.longitude, kind: 'me'});
-      }, () => { if (routeOpen) setPickingStart(true); }, {enableHighAccuracy: true, timeout: 12000, maximumAge: 30000});
+      }, () => { if (routeOpen) { showRouteState('warn', tr('geoDenied')); fromInput.focus(); } }, {enableHighAccuracy: true, timeout: 12000, maximumAge: 30000});
+    }
+    function openRoute() {
+      if (!selected || !routeClient) return;
+      routeDest = {lat: selected.lat, lon: selected.lon, kind: 'place', title: selected.title};
+      routeFrom = null; routeOpen = true; card.hidden = true;
+      resetRouteResult(); renderRouteLabels(); updatePins(); refreshSheetVisibility(); setExpanded(false);
+      useMyLocation();
     }
     function setRouteStart(point) {
       setPickingStart(false);
       routeFrom = point;
-      renderRouteLabels();
+      renderRouteLabels(); updatePins();
       buildRoute();
     }
     const ROUTE_ERRORS = {outside_coverage: 'routeOutside', no_route: 'routeNoRoute', no_road_near_point: 'routeNoRoad', route_too_long: 'routeTooLong', points_too_close: 'routeTooClose'};
     function buildRoute() {
-      if (!routeOpen || !routeFrom || !routeDest) return;
+      if (!routeOpen || !routeDest) return;
       if (routeAbort) routeAbort.abort();
+      routeAbort = null;
+      if (!routeFrom) { resetRouteResult(true); showRouteState('info', tr('routeNeedStart')); return; }
       routeAbort = new AbortController();
       const mine = routeAbort;
-      resetRouteResult();
+      resetRouteResult(true);
       showRouteState('loading', tr('routeBuilding'));
-      routeClient.route({from: routeFrom, to: routeDest, mode: routeMode, lang, signal: mine.signal, onSlow: () => showRouteState('loading', tr('routeBuilding'), tr('waking'))})
-        .then(route => { if (mine === routeAbort && routeOpen) showRoute(route); })
+      routeClient.route({from: routeFrom, to: routeDest, mode: routeMode, lang, alternatives: true, signal: mine.signal,
+        onSlow: () => showRouteState('loading', tr('routeBuilding'), tr('waking'))})
+        .then(route => { if (mine === routeAbort && routeOpen) showRoutes(route); })
         .catch(error => {
           if (error.code === 'aborted' || mine !== routeAbort || !routeOpen) return;
           const key = ROUTE_ERRORS[error.detail];
@@ -985,9 +1063,36 @@
           if (!key && error.code !== 'rate_limited') { const link = $('route-external'); link.href = core.routeUrl(routeDest.lat, routeDest.lon); link.hidden = false; }
         });
     }
-    function showRoute(route) {
+    function showRoutes(main) {
+      routes = [main, ...main.alternatives];
+      routeActive = 0;
       routeStateEl.hidden = true;
-      setRouteData(route.coordinates);
+      renderOptions();
+      selectRoute(0, true);
+    }
+    function renderOptions() {
+      routeOptionsEl.replaceChildren();
+      routeOptionsEl.hidden = routes.length < 2;
+      const fastest = Math.min(...routes.map(r => r.duration));
+      routes.forEach((r, i) => {
+        const li = document.createElement('li'); li.tabIndex = 0; li.setAttribute('role', 'option'); li.setAttribute('aria-selected', String(i === routeActive));
+        const left = document.createElement('div');
+        const time = document.createElement('strong'); time.textContent = core.formatDuration(r.duration, lang);
+        const label = document.createElement('small'); label.textContent = r.duration === fastest ? tr('routeFastest') : tr('routeVariant').replace('{n}', i + 1);
+        left.append(time, label);
+        const dist = document.createElement('small'); dist.textContent = core.formatDistance(r.distance, lang);
+        li.append(left, dist);
+        const go = () => selectRoute(i, false);
+        li.addEventListener('click', go);
+        li.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+        routeOptionsEl.append(li);
+      });
+    }
+    function selectRoute(index, fit) {
+      routeActive = index;
+      const route = routes[index];
+      [...routeOptionsEl.children].forEach((li, i) => li.setAttribute('aria-selected', String(i === index)));
+      setRouteData(routes, index);
       $('route-total').textContent = core.formatDistance(route.distance, lang) + ' · ' + core.formatDuration(route.duration, lang);
       $('route-narration').textContent = route.narrationLang !== lang ? tr('routeNarrationRu') : '';
       $('route-narration').hidden = route.narrationLang === lang;
@@ -1005,9 +1110,10 @@
         routeStepsEl.append(li);
       }
       routeStepsEl.hidden = !route.steps.length;
-      if (route.bbox) {
+      if (fit && route.bbox) {
+        const all = routes.reduce((b, r) => r.bbox ? [Math.min(b[0], r.bbox[0]), Math.min(b[1], r.bbox[1]), Math.max(b[2], r.bbox[2]), Math.max(b[3], r.bbox[3])] : b, route.bbox);
         const bottom = isMobile() && !sheet.hidden ? Math.min(sheet.offsetHeight, window.innerHeight * 0.62) : 0;
-        map.fitBounds([[route.bbox[0], route.bbox[1]], [route.bbox[2], route.bbox[3]]], {padding: {top: 90, left: isMobile() ? 40 : 440, right: 40, bottom: bottom + 40}, maxZoom: 17, duration: 800, essential: false});
+        map.fitBounds([[all[0], all[1]], [all[2], all[3]]], {padding: {top: 90, left: isMobile() ? 40 : 440, right: 40, bottom: bottom + 40}, maxZoom: 17, duration: 800, essential: false});
       }
       syncSheetHeight();
       setStatus(core.formatDistance(route.distance, lang) + ' · ' + core.formatDuration(route.duration, lang));
@@ -1022,11 +1128,12 @@
     }
     $('route-close').addEventListener('click', () => closeRoute(true));
     $('route-pick').addEventListener('click', () => setPickingStart(!pickingStart));
+    $('route-locate').addEventListener('click', useMyLocation);
     $('route-swap').addEventListener('click', () => {
-      if (!routeFrom || !routeDest) return;
-      const end = routeFrom.kind === 'place' ? routeFrom : {lat: routeFrom.lat, lon: routeFrom.lon, kind: routeFrom.kind};
-      routeFrom = routeDest; routeDest = end;
-      renderRouteLabels(); buildRoute();
+      if (!routeFrom && !routeDest) return;
+      const a = routeFrom, b = routeDest;
+      routeFrom = b; routeDest = a;
+      renderRouteLabels(); updatePins(); buildRoute();
     });
     for (const button of document.querySelectorAll('#route-modes .mode')) {
       button.addEventListener('click', () => {
