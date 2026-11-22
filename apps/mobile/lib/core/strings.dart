@@ -63,6 +63,26 @@ const labels = <String, List<String>>{
     'Геолокацияны қосып, баптауларда рұқсат беріңіз',
     'Enable location and grant access in Settings',
   ],
+  'gpsOff': [
+    'Геолокация выключена. Включите её в настройках телефона',
+    'Геолокация өшірулі. Телефон баптауларында қосыңыз',
+    'Location is off. Turn it on in the phone settings',
+  ],
+  'gpsDenied': [
+    'Нет доступа к геолокации. Разрешите его в настройках приложения',
+    'Геолокацияға рұқсат жоқ. Қолданба баптауларында рұқсат беріңіз',
+    'Location permission denied. Allow it in the app settings',
+  ],
+  'gpsWeak': [
+    'Не удалось определить местоположение. Выйдите на открытое место и повторите',
+    'Орналасқан жерді анықтау мүмкін болмады. Ашық жерге шығып, қайталаңыз',
+    'Could not get your position. Move to an open area and retry',
+  ],
+  'wake': [
+    'Сервер маршрутов просыпается, это может занять до минуты…',
+    'Бағыт сервері оянып жатыр, бір минутқа дейін созылуы мүмкін…',
+    'The routing server is waking up; this can take up to a minute…',
+  ],
   'empty': ['Ничего не найдено', 'Ештеңе табылмады', 'No results'],
   'network': [
     'Нет связи. Проверьте подключение',

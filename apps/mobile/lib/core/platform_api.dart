@@ -1,7 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+
+import 'diagnostics.dart';
 
 const webUrl = String.fromEnvironment(
   'KUNDE_WEB_URL',
@@ -109,8 +113,16 @@ class RoadRoute {
         !meters.isFinite ||
         !seconds.isFinite ||
         meters <= 0 ||
-        seconds < 0) {
+        seconds <= 0) {
       throw const FormatException('Invalid route');
+    }
+    // GeoJSON is [longitude, latitude]. A swapped pair lands outside
+    // Kazakhstan (latitude 40-56 cannot be a longitude here), so reject it
+    // instead of drawing a line in the wrong hemisphere.
+    for (final p in points) {
+      if (!inKazakhstan(p)) {
+        throw const FormatException('Route outside Kazakhstan');
+      }
     }
   }
 
@@ -121,17 +133,101 @@ class RoadRoute {
   final List<Maneuver> steps;
 }
 
+/// Kazakhstan bounding box (min lon 46.4, min lat 40.5, max lon 87.4, max lat 55.6),
+/// the same coverage the routing API enforces.
+bool inKazakhstan(Point p) =>
+    p.lon >= 46.0 && p.lon <= 88.0 && p.lat >= 40.0 && p.lat <= 56.0;
+
 class ApiFailure implements Exception {
-  const ApiFailure(this.code, [this.retryAfter]);
+  const ApiFailure(this.code, [this.retryAfter, this.status]);
   final String code;
   final Duration? retryAfter;
+  final int? status;
+
+  /// Temporary conditions that a free-tier server wake-up or a mobile network
+  /// handover produce; a repeat request usually succeeds.
+  bool get transient =>
+      code == 'timeout' ||
+      code == 'network' ||
+      status == 502 ||
+      status == 503 ||
+      status == 504;
+
+  @override
+  String toString() => 'ApiFailure($code, status: $status)';
+}
+
+String newRequestId() {
+  final random = math.Random.secure();
+  return '${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}-'
+      '${random.nextInt(1 << 31).toRadixString(36)}';
 }
 
 class PlatformApi {
-  PlatformApi(this.client);
+  PlatformApi(
+    this.client, {
+    this.sleep = _sleep,
+    this.timeout = const Duration(seconds: 35),
+  });
   final http.Client client;
+  final Future<void> Function(Duration) sleep;
+  final Duration timeout;
 
-  Future<Json> get(Uri url, {Future<void>? abort}) async {
+  static Future<void> _sleep(Duration d) => Future<void>.delayed(d);
+
+  /// One logical request: up to [retries] extra attempts for transient
+  /// failures (server wake-up, 502/503/504, dropped connection, timeout).
+  /// [onSlow] fires once when the first attempt is still pending after
+  /// [slowAfter] or a retry starts, so the UI can say the server is waking up.
+  Future<Json> get(
+    Uri url, {
+    Future<void>? abort,
+    int retries = 0,
+    Duration slowAfter = const Duration(seconds: 4),
+    VoidCallback? onSlow,
+    bool Function()? cancelled,
+  }) async {
+    final requestId = newRequestId();
+    final started = DateTime.now();
+    final path = url.path;
+    final slow = onSlow == null ? null : Timer(slowAfter, onSlow);
+    try {
+      for (var attempt = 1; ; attempt++) {
+        try {
+          final payload = await _once(url, abort, requestId, attempt);
+          return payload;
+        } on ApiFailure catch (error) {
+          final more =
+              attempt <= retries &&
+              error.transient &&
+              !(cancelled?.call() ?? false);
+          diagnostics.setAll({
+            'api': url.host,
+            'path': path,
+            'request': requestId,
+            'attempts': attempt,
+            'ms': DateTime.now().difference(started).inMilliseconds,
+            'status': error.status ?? error.code,
+            'error': more ? 'retrying:${error.code}' : error.code,
+          });
+          if (!more) rethrow;
+          onSlow?.call();
+          await sleep(Duration(seconds: attempt == 1 ? 1 : 3));
+          if (cancelled?.call() ?? false) rethrow;
+        }
+      }
+    } finally {
+      slow?.cancel();
+    }
+  }
+
+  Future<Json> _once(
+    Uri url,
+    Future<void>? abort,
+    String requestId,
+    int attempt,
+  ) async {
+    final started = DateTime.now();
     final deadline = Completer<void>();
     final request =
         http.AbortableRequest(
@@ -142,32 +238,47 @@ class PlatformApi {
                 : Future.any([abort, deadline.future]),
           )
           ..followRedirects = false
-          ..headers['Accept'] = 'application/json';
+          ..headers['Accept'] = 'application/json'
+          ..headers['X-Request-ID'] = requestId;
     try {
       final response = await client
           .send(request)
           .then(http.Response.fromStream)
           .timeout(
-            const Duration(seconds: 35),
+            timeout,
             onTimeout: () {
               deadline.complete();
               throw const ApiFailure('timeout');
             },
           );
+      diagnostics.setAll({
+        'api': url.host,
+        'path': url.path,
+        'request': requestId,
+        'attempts': attempt,
+        'status': response.statusCode,
+        'ms': DateTime.now().difference(started).inMilliseconds,
+        'edge': response.headers['rndr-id'],
+        'error': null,
+      });
       if (response.statusCode != 200) {
         final wait = int.tryParse(response.headers['retry-after'] ?? '');
         if (url.path == '/v1/route' &&
             (response.statusCode == 400 || response.statusCode == 404)) {
           final code = _routeError(response.bodyBytes);
-          if (code != null) throw ApiFailure(code);
+          if (code != null) throw ApiFailure(code, null, response.statusCode);
         }
-        throw ApiFailure(switch (response.statusCode) {
-          429 => 'rate',
-          401 || 403 => 'access',
-          404 => 'missing',
-          >= 500 => 'service',
-          _ => 'invalid',
-        }, wait == null ? null : Duration(seconds: wait.clamp(0, 600)));
+        throw ApiFailure(
+          switch (response.statusCode) {
+            429 => 'rate',
+            401 || 403 => 'access',
+            404 => 'missing',
+            >= 500 => 'service',
+            _ => 'invalid',
+          },
+          wait == null ? null : Duration(seconds: wait.clamp(0, 600)),
+          response.statusCode,
+        );
       }
       return jsonDecode(utf8.decode(response.bodyBytes)) as Json;
     } on TimeoutException {
@@ -197,6 +308,16 @@ class PlatformApi {
       };
     } on FormatException {
       return null;
+    }
+  }
+
+  /// Wakes a sleeping free-tier routing server in the background. It carries
+  /// no user data and its failure is irrelevant: the route request retries.
+  Future<void> warmUp() async {
+    try {
+      await get(endpoint(routingUrl, '/health'));
+    } catch (_) {
+      // Informational only.
     }
   }
 
@@ -253,6 +374,9 @@ class PlatformApi {
     String language, {
     bool alternatives = false,
     Future<void>? abort,
+    int retries = 2,
+    VoidCallback? onSlow,
+    bool Function()? cancelled,
   }) async {
     final payload = await get(
       endpoint(routingUrl, '/v1/route', {
@@ -263,6 +387,9 @@ class PlatformApi {
         if (alternatives) 'alternatives': '1',
       }),
       abort: abort,
+      retries: retries,
+      onSlow: onSlow,
+      cancelled: cancelled,
     );
     final routes = <RoadRoute>[];
     try {
@@ -273,8 +400,14 @@ class PlatformApi {
           error is! RangeError) {
         rethrow;
       }
+      diagnostics.set('error', 'routePayload');
       throw const ApiFailure('routePayload');
     }
+    diagnostics.setAll({
+      'points': routes.first.points.length,
+      'meters': routes.first.meters.round(),
+      'seconds': routes.first.seconds.round(),
+    });
     final options = payload['alternatives'];
     if (options is List) {
       for (final item in options.whereType<Json>()) {

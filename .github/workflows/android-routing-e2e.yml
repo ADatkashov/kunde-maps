@@ -1,0 +1,137 @@
+name: Android Routing E2E
+
+on:
+  pull_request:
+    paths:
+      - 'apps/mobile/**'
+      - 'services/routing/**'
+      - '.github/workflows/android-routing-e2e.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+      - '.github/workflows/android-routing-e2e.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-routing-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  routing-e2e:
+    name: Android Routing E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.50.1'
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+        working-directory: apps/mobile
+      - name: Wake the real DEV Routing API and check an Almaty route over HTTPS
+        run: |
+          set -euo pipefail
+          base=https://kunde-maps-routing-dev.onrender.com
+          for i in $(seq 1 12); do
+            code=$(curl -s -o /dev/null -m 60 -w '%{http_code}' "$base/health" || true)
+            echo "health attempt $i: $code"
+            [ "$code" = 200 ] && break
+            sleep 10
+          done
+          [ "$code" = 200 ]
+          curl -fsS -m 90 -G "$base/v1/route" --data-urlencode 'from=43.202109,76.891926' --data-urlencode 'to=43.232663,76.956966' --data-urlencode mode=car --data-urlencode lang=en -o route.json
+          python3 - <<'PY'
+          import json
+          d = json.load(open('route.json'))
+          c = d['geometry']['coordinates']
+          assert len(c) > 20 and d['distance_m'] > 5000 and d['duration_s'] > 300, d.get('error')
+          assert all(46 < x < 88 and 40 < y < 56 for x, y in c), 'coordinate order'
+          print('route ok', len(c), d['distance_m'], d['duration_s'])
+          PY
+      - name: Enable KVM on the runner
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            adb logcat -c
+            (adb logcat -v time > /tmp/logcat.txt &)
+            cd apps/mobile && flutter drive -d emulator-5554 --no-pub --driver=integration_test/routing_driver.dart --target=integration_test/routing_e2e_test.dart --dart-define=KUNDE_TEST_SCREENSHOTS=true --dart-define=KUNDE_DIAGNOSTICS=true
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: android-routing-e2e
+          path: |
+            apps/mobile/build/routing-e2e/
+            /tmp/logcat.txt
+          if-no-files-found: warn
+
+  release-smoke:
+    name: Android release build starts without crashing
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.50.1'
+          cache: true
+      - run: flutter pub get --enforce-lockfile && flutter build apk --release --dart-define=KUNDE_DIAGNOSTICS=true
+        working-directory: apps/mobile
+      - name: Sign the release build with a throwaway test key (install only; the real keystore is used by the release workflow)
+        run: |
+          set -euo pipefail
+          keytool -genkeypair -keystore "$RUNNER_TEMP/smoke.jks" -storepass smoke-pass -keypass smoke-pass -alias smoke -keyalg RSA -keysize 2048 -validity 2 -dname 'CN=smoke'
+          apksigner="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
+          "$apksigner" sign --ks "$RUNNER_TEMP/smoke.jks" --ks-pass pass:smoke-pass --key-pass pass:smoke-pass --out apps/mobile/build/smoke.apk apps/mobile/build/app/outputs/flutter-apk/app-release.apk
+      - name: Enable KVM on the runner
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            adb install -r apps/mobile/build/smoke.apk
+            adb logcat -c
+            adb shell am start -n kz.kunde.maps/.MainActivity
+            sleep 40
+            adb logcat -d > /tmp/release-logcat.txt
+            adb exec-out screencap -p > /tmp/release-start.png
+            adb shell pidof kz.kunde.maps
+            ! grep -E "FATAL EXCEPTION|Process: kz.kunde.maps|(ClassNotFoundException|NoSuchMethodError|UnsatisfiedLinkError).*(kunde|maplibre|flutter|geolocator)" /tmp/release-logcat.txt
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: android-release-smoke
+          path: |
+            /tmp/release-logcat.txt
+            /tmp/release-start.png
+          if-no-files-found: warn
