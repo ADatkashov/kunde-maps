@@ -38,6 +38,7 @@ class NavigationSession extends ChangeNotifier {
   bool follow = true;
   String? issue;
   int _generation = 0;
+  int _rerouteFailures = 0;
 
   String get status {
     if (arrived) return 'arrived';
@@ -77,7 +78,7 @@ class NavigationSession extends ChangeNotifier {
           },
         );
     _watchdog = Timer.periodic(const Duration(seconds: 2), (_) {
-      if (status == 'weak') notifyListeners();
+      if (status == 'weak' || issue != null) notifyListeners();
     });
     notifyListeners();
     return true;
@@ -95,11 +96,12 @@ class NavigationSession extends ChangeNotifier {
       arrived = true;
       if (voice) unawaited(_speak(words('arrived'), allowArrival: true));
     } else if (progress.offRoute) {
-      if (_reroute == null && now.isAfter(_retryAt)) {
+      if (_reroute == null && _rerouteFailures < 4 && now.isAfter(_retryAt)) {
         unawaited(_recalculate(point));
       }
     } else {
       _cancelReroute();
+      _rerouteFailures = 0;
       issue = null;
       final next = progress.nextStep;
       if (voice && next != null) {
@@ -127,18 +129,36 @@ class NavigationSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  String? instructionKey(Maneuver step) => switch (step.type) {
+    4 || 5 || 6 => 'destinationAhead',
+    0 || 7 || 8 || 17 || 22 => 'straight',
+    9 || 10 || 11 || 18 || 20 || 23 => 'right',
+    14 || 15 || 16 || 19 || 21 || 24 => 'left',
+    12 || 13 => 'uturn',
+    26 => 'roundabout',
+    27 => 'exit',
+    _ => null,
+  };
+
   String instruction(Maneuver step) {
-    final key = switch (step.type) {
-      4 || 5 || 6 => 'destinationAhead',
-      0 || 7 || 8 || 17 || 22 => 'straight',
-      9 || 10 || 11 || 18 || 20 || 23 => 'right',
-      14 || 15 || 16 || 19 || 21 || 24 => 'left',
-      12 || 13 => 'uturn',
-      26 => 'roundabout',
-      27 => 'exit',
-      _ => null,
-    };
+    final key = instructionKey(step);
     return key == null ? step.instruction : words(key);
+  }
+
+  bool get canRetry =>
+      active &&
+      progress.offRoute &&
+      issue != null &&
+      position != null &&
+      _reroute == null &&
+      !DateTime.now().isBefore(_retryAt);
+
+  void retry() {
+    if (!canRetry) return;
+    _rerouteFailures = 0;
+    final fix = position!;
+    unawaited(_recalculate(Point(fix.latitude, fix.longitude)));
+    notifyListeners();
   }
 
   Future<void> _speak(String text, {bool allowArrival = false}) async {
@@ -175,13 +195,18 @@ class NavigationSession extends ChangeNotifier {
       if (active && identical(_reroute, token)) {
         progress = RouteProgress(routes.first, mode);
         _announced.clear();
+        _rerouteFailures = 0;
         issue = null;
       }
     } catch (error) {
       if (active && identical(_reroute, token)) {
         issue = error is ApiFailure ? error.code : 'invalid';
+        _rerouteFailures++;
         final retry = error is ApiFailure ? error.retryAfter : null;
-        _retryAt = DateTime.now().add(retry ?? const Duration(seconds: 20));
+        final backoff = Duration(seconds: 10 * _rerouteFailures);
+        _retryAt = DateTime.now().add(
+          retry != null && retry > backoff ? retry : backoff,
+        );
       }
     } finally {
       if (identical(_reroute, token)) {

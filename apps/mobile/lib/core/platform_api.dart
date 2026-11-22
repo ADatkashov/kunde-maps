@@ -83,11 +83,13 @@ class Maneuver {
         (data['location'] as List)[0],
       ),
       instruction = data['instruction'] as String,
+      street = data['street'] as String?,
       type = data['type'] as int,
       seconds = (data['duration_s'] as num).toDouble();
 
   final Point point;
   final String instruction;
+  final String? street;
   final int type;
   final double seconds;
 }

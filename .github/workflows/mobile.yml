@@ -35,7 +35,7 @@ jobs:
       - working-directory: apps/mobile
         run: |
           flutter pub get --enforce-lockfile
-          dart format --output=none --set-exit-if-changed lib test
+          dart format --output=none --set-exit-if-changed lib test integration_test
           flutter analyze
           flutter test
   android:
@@ -71,15 +71,36 @@ jobs:
       - run: flutter pub get --enforce-lockfile
       - run: flutter test
       - run: flutter build ios --release --no-codesign --no-pub
-  dependency-review:
-    if: github.event_name == 'pull_request'
+        env:
+          BYPASS_PERMISSION_LOCATION_ALWAYS: '1'
+      - name: Verify native rendering on an available iPhone simulator
+        env:
+          BYPASS_PERMISSION_LOCATION_ALWAYS: '1'
+        run: |
+          simulator="$(xcrun simctl list devices available --json | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next((x["udid"] for k in sorted(d, reverse=True) for x in d[k] if x["name"].startswith("iPhone")), ""))')"
+          if [[ -z "$simulator" ]]; then
+            echo "::warning::This runner has no available iPhone simulator"
+            exit 0
+          fi
+          xcrun simctl boot "$simulator"
+          xcrun simctl bootstatus "$simulator" -b
+          flutter test -d "$simulator" integration_test/dev_smoke_test.dart --no-pub
+  dependency-audit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/dependency-review-action@v4
+      - uses: google/osv-scanner-action/osv-scanner-action@v2.7.1
         with:
-          fail-on-severity: high
-          deny-licenses: AGPL-3.0-only, AGPL-3.0-or-later
+          scan-args: |-
+            --lockfile=apps/mobile/pubspec.lock
+            --format=table
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+        working-directory: apps/mobile
+      - run: python3 apps/mobile/tool/check_licenses.py
   secret-scan:
     runs-on: ubuntu-latest
     steps:

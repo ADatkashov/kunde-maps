@@ -198,10 +198,8 @@ class _MapHomeState extends State<MapHome> {
       _error = null;
       _loading = value.length >= 2;
     });
-    if (value.length < 2) {
-      _redraw();
-      return;
-    }
+    _redraw();
+    if (value.length < 2) return;
     _debounce = Timer(const Duration(milliseconds: 350), () async {
       final abort = Completer<void>();
       _abortSearch = abort;
@@ -233,7 +231,7 @@ class _MapHomeState extends State<MapHome> {
     }
   }
 
-  void _nearby(String? category) {
+  Future<void> _nearby(String? category, {bool fromDevice = false}) async {
     _cancelSearch();
     final token = ++_request;
     _query.clear();
@@ -243,7 +241,14 @@ class _MapHomeState extends State<MapHome> {
       _error = null;
       _loading = true;
     });
-    unawaited(_loadPlaces(token, () => _api.nearby(_gps ?? _center, category)));
+    final location = fromDevice ? await _locate() : null;
+    if (!mounted || token != _request) return;
+    unawaited(
+      _loadPlaces(
+        token,
+        () => _api.nearby(location?.point ?? _gps ?? _center, category),
+      ),
+    );
     if (_categories.isEmpty) unawaited(_loadCategories());
   }
 
@@ -388,7 +393,7 @@ class _MapHomeState extends State<MapHome> {
           left: 32,
           right: 32,
           top: 35,
-          bottom: 225,
+          bottom: MediaQuery.sizeOf(context).height * .44,
         ),
       ),
     );
@@ -923,6 +928,11 @@ class _MapHomeState extends State<MapHome> {
               onPressed: _end,
               child: Text(w(session.active ? 'stop' : 'close')),
             ),
+            if (session.active && session.issue != null)
+              TextButton(
+                onPressed: session.canRetry ? session.retry : null,
+                child: Text(w('retry')),
+              ),
             if (session.active)
               IconButton(
                 tooltip: w('voice'),
@@ -1021,7 +1031,7 @@ class _MapHomeState extends State<MapHome> {
                 children: [
                   ActionChip(
                     label: Text(w('near')),
-                    onPressed: () => _nearby(null),
+                    onPressed: () => _nearby(null, fromDevice: true),
                   ),
                   ActionChip(
                     label: Text(w('directions')),
@@ -1050,14 +1060,30 @@ class _MapHomeState extends State<MapHome> {
     final session = _session;
     final next = session?.progress.nextStep;
     if (_navigating && next != null) {
+      final step = session!.progress.route.steps[next];
+      final icon = switch (session.instructionKey(step)) {
+        'right' => Icons.turn_right,
+        'left' => Icons.turn_left,
+        'uturn' => Icons.u_turn_left,
+        'destinationAhead' => Icons.flag_outlined,
+        _ => Icons.navigation,
+      };
       return Card(
         color: const Color(0xff2563eb),
         child: ListTile(
           textColor: Colors.white,
           iconColor: Colors.white,
-          leading: const Icon(Icons.navigation),
-          title: Text(session!.instruction(session.progress.route.steps[next])),
-          subtitle: Text(_distance(session.progress.maneuverMeters)),
+          leading: Icon(icon),
+          title: Text(session.instruction(step)),
+          subtitle: Text(
+            [
+              _distance(session.progress.maneuverMeters),
+              if (step.street?.isNotEmpty ?? false) step.street!,
+              if (session.instructionKey(step) == null &&
+                  session.progress.route.language != w.language)
+                session.progress.route.language.toUpperCase(),
+            ].join(' · '),
+          ),
         ),
       );
     }
@@ -1126,7 +1152,7 @@ class _MapHomeState extends State<MapHome> {
                         padding: const EdgeInsets.only(right: 6),
                         child: ActionChip(
                           label: Text(w('near')),
-                          onPressed: () => _nearby(null),
+                          onPressed: () => _nearby(null, fromDevice: true),
                         ),
                       ),
                       for (final category in _categories)
