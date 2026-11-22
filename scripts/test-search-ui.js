@@ -372,6 +372,7 @@ const tests = {
     await page.locator('#places-state').filter({hasText: /временно недоступны|Не удалось/}).waitFor({timeout: 10000});
     await page.locator('#places-state').getByRole('button', {name: 'Повторить'}).click();
     await page.locator('#places-state').filter({hasText: 'нет мест выбранных категорий'}).waitFor();
+    assert.match(await page.locator('#places-state').innerText(), /Отдалите карту/, 'an empty result says what to do next');
     await page.locator('.chip[data-category=bank]').click();
     await page.locator('#places-state').filter({hasText: /Слишком много запросов/}).waitFor();
     await context.close();
