@@ -25,6 +25,20 @@ test('builds an encoded request and maps valid places only', async () => {
   assert.equal(urls[0], 'https://s.test/v1/search?q=%D2%9A%D0%B0%D0%B7%D0%B0%D2%9B%D1%81%D1%82%D0%B0%D0%BD%20%26%20co&limit=5');
 });
 
+test('sends language and rounded map centre as ranking hints; cache is keyed by them', async () => {
+  const urls = [];
+  const c = client(async url => { urls.push(url); return ok([place()]); });
+  await c.search('Алматы', {lang: 'kk', center: {lat: 43.23891, lng: 76.94512}});
+  assert.match(urls[0], /&lang=kk&lat=43\.24&lon=76\.95$/);
+  await c.search('Алматы', {lang: 'kk', center: {lat: 43.23891, lng: 76.94512}});
+  assert.equal(urls.length, 1, 'same hints are cached');
+  await c.search('Алматы', {lang: 'en'});
+  assert.equal(urls.length, 2);
+  assert.doesNotMatch(urls[1], /lat=|lon=/);
+  await c.search('Алматы', {lang: 'xx', center: {lat: NaN, lng: 1}});
+  assert.doesNotMatch(urls[2], /lang=|lat=/, 'invalid hints are dropped, never sent');
+});
+
 test('rejects too-short queries without a network call and requires configuration', async () => {
   let calls = 0;
   const c = client(async () => { calls++; return ok([]); });
@@ -102,6 +116,7 @@ test('display names fall back to canonical name and never invent values', () => 
   assert.equal(core.displayName(core.validPlace(place({name: 'A', name_ru: 'Р', name_kk: 'К'})), 'ru'), 'Р');
   assert.equal(core.displayName(core.validPlace(place({name: 'A', name_ru: 'Р', name_kk: 'К'})), 'kk'), 'К');
   assert.equal(core.displayName(core.validPlace(place({name: 'A', name_ru: 'Р', name_kk: 'К'})), 'en'), 'A');
+  assert.equal(core.displayName(core.validPlace(place({name: 'А', name_en: 'Almaty'})), 'en'), 'Almaty');
 });
 
 test('kind labels are localized with a neutral fallback for unknown OSM keys', () => {

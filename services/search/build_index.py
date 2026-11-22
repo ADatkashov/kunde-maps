@@ -10,6 +10,8 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import textnorm
+
 
 def features(path):
     """Stream JSONL without loading the entire national extract into memory."""
@@ -41,7 +43,12 @@ def features(path):
                 yield json.loads(line)
 
 
+SCHEMA_VERSION = "2"
+ALT_TAGS = ("alt_name", "official_name", "old_name", "int_name")
+
+
 def build(source, destination):
+    """Build a schema-v2 index: places + FTS5 over names and a cross-script `skel` column (see textnorm.py)."""
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
     temp = destination.with_suffix(".tmp")
@@ -49,13 +56,16 @@ def build(source, destination):
     db = sqlite3.connect(temp)
     try:
         db.executescript("""
+            CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
             CREATE TABLE places (
               id INTEGER PRIMARY KEY, name TEXT NOT NULL,
-              name_ru TEXT, name_kk TEXT, kind TEXT NOT NULL,
-              lat REAL NOT NULL, lon REAL NOT NULL
+              name_ru TEXT, name_kk TEXT, name_en TEXT, alt TEXT, kind TEXT NOT NULL,
+              lat REAL NOT NULL, lon REAL NOT NULL, importance INTEGER NOT NULL DEFAULT 0
             );
+            -- remove_diacritics 0: textnorm.skeleton uses distinct letters (ş ç ž ţ) that must not be folded.
             CREATE VIRTUAL TABLE places_fts USING fts5(
-              name, name_ru, name_kk, address, content=''
+              name, name_ru, name_kk, name_en, alt, skel, address, content='',
+              tokenize='unicode61 remove_diacritics 0'
             );
         """)
         count = 0
@@ -76,25 +86,31 @@ def build(source, destination):
             p = feature.get("properties") or {}
             street = str(p.get("addr:street") or "").strip()
             number = str(p.get("addr:housenumber") or "").strip()
-            name = str(p.get("name") or p.get("name:ru") or p.get("name:kk") or
-                       (street + " " + number).strip()).strip()
-            if not name:
-                continue
             ru = str(p.get("name:ru") or "")
             kk = str(p.get("name:kk") or "")
+            en = str(p.get("name:en") or "")
+            name = str(p.get("name") or ru or kk or en or (street + " " + number).strip()).strip()
+            if not name:
+                continue
+            alt = "; ".join(v for v in (str(p.get(tag) or "").strip() for tag in ALT_TAGS) if v)
             kind = str(p.get("amenity") or p.get("shop") or p.get("place") or "address")
+            capital = str(p.get("capital") or "") in ("yes", "4", "2", "3")
+            importance = textnorm.importance(kind, p.get("population"), capital)
             address = " ".join(part for part in [street, number] if part)
+            skel = " ".join(dict.fromkeys(textnorm.skeleton_tokens(" ".join((name, ru, kk, en, alt, address)))))
             cursor = db.execute(
-                "INSERT INTO places(name,name_ru,name_kk,kind,lat,lon) VALUES(?,?,?,?,?,?)",
-                (name, ru, kk, kind, lat, lon),
+                "INSERT INTO places(name,name_ru,name_kk,name_en,alt,kind,lat,lon,importance) VALUES(?,?,?,?,?,?,?,?,?)",
+                (name, ru, kk, en, alt, kind, lat, lon, importance),
             )
             db.execute(
-                "INSERT INTO places_fts(rowid,name,name_ru,name_kk,address) VALUES(?,?,?,?,?)",
-                (cursor.lastrowid, name, ru, kk, address),
+                "INSERT INTO places_fts(rowid,name,name_ru,name_kk,name_en,alt,skel,address) VALUES(?,?,?,?,?,?,?,?)",
+                (cursor.lastrowid, name, ru, kk, en, alt, skel, address),
             )
             count += 1
             if count % 10000 == 0:
                 db.commit()
+        db.execute("INSERT INTO meta(key,value) VALUES('schema_version',?)", (SCHEMA_VERSION,))
+        db.execute("INSERT INTO meta(key,value) VALUES('rows',?)", (str(count),))
         db.commit()
         db.execute("PRAGMA integrity_check")
         db.close()
