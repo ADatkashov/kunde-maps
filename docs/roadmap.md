@@ -30,3 +30,10 @@
 - MAP-017 API keys, metering, billing and SLA
 
 Acceptance criteria per task: runnable implementation, automated tests, license/provenance validation, documented limits and a reviewed PR.
+
+## Status (2026-11-22)
+- Delivered: self-hosted PMTiles map; Search API (FTS5, verified index provisioning); web design system v1 with real search
+  (autocomplete, fly-to, marker, place card, share link, RU/KK/EN, light/dark). See `docs/development/project-state.md`.
+- Next: Search API protection, index quality/transliteration, cartographic style v2 (`docs/development/next-task.md`).
+- Phase mapping used in autonomous development: P1 web design + search, P2 search quality + protection, P3 places/POI,
+  P4 routing (Valhalla evaluation), P5 navigation, P6 Flutter apps, P7 public/B2B API and KUNDE integration.

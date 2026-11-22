@@ -18,3 +18,8 @@ Independent KUNDE Maps API, later consumed by KUNDE and external clients. API ve
 
 ## Decision gates
 Benchmark memory, storage and import times on actual Kazakhstan extracts before selecting hosting. Validate road restrictions and address search against curated ground-truth samples. Do not promise live traffic without sufficient GPS observations.
+
+## Web client and search (see ADR 0001)
+Static web app (nginx) -> PMTiles on R2 for tiles; browser -> Search API (`/v1/search`) for places. Runtime config
+(`config.json`) is generated at container start from `MAPS_TILE_URL` and `MAPS_SEARCH_URL`. Decisions:
+`docs/architecture/decisions/`.

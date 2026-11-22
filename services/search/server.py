@@ -95,6 +95,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
             self.send_header("Access-Control-Max-Age", "600")
+            # Browsers hide Retry-After from cross-origin scripts unless it is exposed.
+            self.send_header("Access-Control-Expose-Headers", "Retry-After")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
