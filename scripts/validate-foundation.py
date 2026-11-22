@@ -20,7 +20,8 @@ def validate():
     assert config["styleUrl"] == "http://localhost:8080/style.json"
     ids = [layer["id"] for layer in style["layers"]]
     assert len(ids) == len(set(ids)), "Duplicate style layer ID"
-    assert "background" in ids and "roads" in ids, "Essential map layers missing"
+    # Roads are split by class (road-motorway, road-primary, ... plus casings), so require any road layer.
+    assert "background" in ids and any(i.startswith("road") for i in ids), "Essential map layers missing"
     for layer in style["layers"]:
         if "source" in layer:
             assert layer["source"] in style["sources"], f"Unknown source in {layer['id']}"
