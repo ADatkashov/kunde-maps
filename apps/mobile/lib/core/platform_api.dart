@@ -132,16 +132,35 @@ class PlatformApi {
   final http.Client client;
 
   Future<Json> get(Uri url, {Future<void>? abort}) async {
-    final request = http.AbortableRequest('GET', url, abortTrigger: abort)
-      ..followRedirects = false
-      ..headers['Accept'] = 'application/json';
+    final deadline = Completer<void>();
+    final request =
+        http.AbortableRequest(
+            'GET',
+            url,
+            abortTrigger: abort == null
+                ? deadline.future
+                : Future.any([abort, deadline.future]),
+          )
+          ..followRedirects = false
+          ..headers['Accept'] = 'application/json';
     try {
       final response = await client
           .send(request)
           .then(http.Response.fromStream)
-          .timeout(const Duration(seconds: 35));
+          .timeout(
+            const Duration(seconds: 35),
+            onTimeout: () {
+              deadline.complete();
+              throw const ApiFailure('timeout');
+            },
+          );
       if (response.statusCode != 200) {
         final wait = int.tryParse(response.headers['retry-after'] ?? '');
+        if (url.path == '/v1/route' &&
+            (response.statusCode == 400 || response.statusCode == 404)) {
+          final code = _routeError(response.bodyBytes);
+          if (code != null) throw ApiFailure(code);
+        }
         throw ApiFailure(switch (response.statusCode) {
           429 => 'rate',
           401 || 403 => 'access',
@@ -161,6 +180,23 @@ class PlatformApi {
       throw const ApiFailure('invalid');
     } on TypeError {
       throw const ApiFailure('invalid');
+    }
+  }
+
+  String? _routeError(List<int> bytes) {
+    try {
+      final body = jsonDecode(utf8.decode(bytes));
+      final code = body is Json ? body['error'] : null;
+      return switch (code) {
+        'no_route' => 'routeNotFound',
+        'no_road_near_point' => 'routeNoRoad',
+        'outside_coverage' => 'routeCoverage',
+        'points_too_close' => 'routeTooClose',
+        'route_too_long' => 'routeTooLong',
+        _ => null,
+      };
+    } on FormatException {
+      return null;
     }
   }
 
@@ -228,11 +264,39 @@ class PlatformApi {
       }),
       abort: abort,
     );
-    return [
-      RoadRoute(payload),
-      for (final item in (payload['alternatives'] as List? ?? []))
-        RoadRoute(item as Json),
-    ];
+    final routes = <RoadRoute>[];
+    try {
+      routes.add(RoadRoute(payload));
+    } on Object catch (error) {
+      if (error is! FormatException &&
+          error is! TypeError &&
+          error is! RangeError) {
+        rethrow;
+      }
+      throw const ApiFailure('routePayload');
+    }
+    final options = payload['alternatives'];
+    if (options is List) {
+      for (final item in options.whereType<Json>()) {
+        try {
+          routes.add(
+            RoadRoute({
+              ...item,
+              'instruction_language':
+                  item['instruction_language'] ??
+                  payload['instruction_language'],
+            }),
+          );
+        } on Object catch (error) {
+          if (error is! FormatException &&
+              error is! TypeError &&
+              error is! RangeError) {
+            rethrow;
+          }
+        }
+      }
+    }
+    return routes;
   }
 
   static List<Place> placesFrom(Object? values) =>

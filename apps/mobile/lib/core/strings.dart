@@ -91,6 +91,41 @@ const labels = <String, List<String>>{
     'Сұрауды өңдеу мүмкін болмады',
     'Could not process the request',
   ],
+  'routeNotFound': [
+    'Маршрут не найден',
+    'Бағыт табылмады',
+    'No route connects these points',
+  ],
+  'routeNoRoad': [
+    'Рядом с одной из точек нет дороги',
+    'Нүктелердің біріне жақын жол жоқ',
+    'No road near one of the points',
+  ],
+  'routeCoverage': [
+    'Точки должны быть в Казахстане',
+    'Нүктелер Қазақстанда болуы керек',
+    'Choose points within Kazakhstan',
+  ],
+  'routeTooClose': [
+    'Выберите точки дальше друг от друга',
+    'Бір-бірінен алыс нүктелерді таңдаңыз',
+    'Choose points farther apart',
+  ],
+  'routeTooLong': [
+    'Маршрут слишком длинный',
+    'Бағыт тым ұзын',
+    'The route is too long',
+  ],
+  'routePayload': [
+    'Сервис вернул некорректный маршрут',
+    'Қызмет жарамсыз бағыт қайтарды',
+    'The service returned an invalid route',
+  ],
+  'routeRender': [
+    'Не удалось отобразить маршрут',
+    'Бағытты көрсету мүмкін болмады',
+    'Could not display the route',
+  ],
   'retry': ['Повторить', 'Қайталау', 'Retry'],
   'close': ['Закрыть', 'Жабу', 'Close'],
   'save': ['Сохранить', 'Сақтау', 'Save'],

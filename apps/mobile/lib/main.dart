@@ -364,17 +364,19 @@ class _MapHomeState extends State<MapHome> {
         _routeIndex = 0;
       });
       _redraw();
-      _fit(routes.first);
+      unawaited(_fit(routes.first));
     } catch (error) {
       if (mounted && token == _request) {
-        setState(() => _error = _problem(error));
+        final code = _problem(error);
+        debugPrint('KUNDE route: $code');
+        setState(() => _error = code);
       }
     } finally {
       if (mounted && token == _request) setState(() => _loading = false);
     }
   }
 
-  void _fit(RoadRoute route) {
+  Future<void> _fit(RoadRoute route) async {
     var south = 90.0, north = -90.0, west = 180.0, east = -180.0;
     for (final p in route.points) {
       if (p.lat < south) south = p.lat;
@@ -386,17 +388,20 @@ class _MapHomeState extends State<MapHome> {
       southwest: map.LatLng(south - .00001, west - .00001),
       northeast: map.LatLng(north + .00001, east + .00001),
     );
-    unawaited(
-      _map?.animateCamera(
+    final height = context.size?.height ?? MediaQuery.sizeOf(context).height;
+    try {
+      await _map?.animateCamera(
         map.CameraUpdate.newLatLngBounds(
           bounds,
           left: 32,
           right: 32,
-          top: 35,
-          bottom: MediaQuery.sizeOf(context).height * .44,
+          top: (MediaQuery.paddingOf(context).top + 60).clamp(0, height * .24),
+          bottom: height * .49,
         ),
-      ),
-    );
+      );
+    } catch (_) {
+      debugPrint('KUNDE route: camera fit failed');
+    }
   }
 
   Future<void> _start() async {
@@ -477,16 +482,10 @@ class _MapHomeState extends State<MapHome> {
         final controller = _map!;
         final chosen = _route;
         if (!identical(_lastPaintedRoute, chosen)) {
-          await controller.clearLines();
-          for (final route in [..._routes.where((r) => r != chosen), ?chosen]) {
-            await controller.addLine(
-              map.LineOptions(
-                geometry: route.points.map(_latLng).toList(),
-                lineColor: route == chosen ? '#2563EB' : '#737F92',
-                lineWidth: route == chosen ? 7 : 5,
-              ),
-            );
-          }
+          await controller.setGeoJsonSource(
+            routeSourceId,
+            routeFeatures(_routes, chosen),
+          );
           _lastPaintedRoute = chosen;
         }
         await controller.clearCircles();
@@ -521,8 +520,13 @@ class _MapHomeState extends State<MapHome> {
       }
     } catch (_) {
       _lastPaintedRoute = null;
+      if (mounted && _mapReady && _route != null) {
+        debugPrint('KUNDE route: map render failed');
+        setState(() => _error = 'routeRender');
+      }
     } finally {
       _painting = false;
+      if (_repaintPending) _redraw();
     }
   }
 
@@ -790,7 +794,7 @@ class _MapHomeState extends State<MapHome> {
             onTap: () {
               setState(() => _routeIndex = index);
               _redraw();
-              _fit(route);
+              unawaited(_fit(route));
             },
           ),
         FilledButton.icon(
@@ -1218,6 +1222,7 @@ class _MapHomeState extends State<MapHome> {
                     trackCameraPosition: true,
                     attributionEnabled: false,
                     dragEnabled: false,
+                    featureTapsTriggersMapClick: _picking,
                     compassViewMargins: math.Point(
                       12,
                       MediaQuery.paddingOf(context).top +
@@ -1227,7 +1232,9 @@ class _MapHomeState extends State<MapHome> {
                       _map = controller;
                       controller.onCircleTapped.add((circle) {
                         final place = _pins[circle];
-                        if (place != null) unawaited(_select(place));
+                        if (place != null && !_picking) {
+                          unawaited(_select(place));
+                        }
                       });
                     },
                     onStyleLoadedCallback: () {
