@@ -1,0 +1,76 @@
+name: KUNDE Maps Android release
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Public API environment
+        type: choice
+        options: [dev, prod]
+        default: dev
+
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.50.1'
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter analyze && flutter test
+      - name: Compile and verify signed release
+        env:
+          KEYSTORE_B64: ${{ secrets.KUNDE_ANDROID_KEYSTORE_B64 }}
+          KUNDE_ANDROID_STORE_PASSWORD: ${{ secrets.KUNDE_ANDROID_STORE_PASSWORD }}
+          KUNDE_ANDROID_KEY_ALIAS: ${{ secrets.KUNDE_ANDROID_KEY_ALIAS }}
+          KUNDE_ANDROID_KEY_PASSWORD: ${{ secrets.KUNDE_ANDROID_KEY_PASSWORD }}
+          DIST_ENV: ${{ inputs.environment }}
+          PROD_WEB: ${{ vars.KUNDE_PROD_WEB_URL }}
+          PROD_SEARCH: ${{ vars.KUNDE_PROD_SEARCH_URL }}
+          PROD_ROUTING: ${{ vars.KUNDE_PROD_ROUTING_URL }}
+          PROD_TILES: ${{ vars.KUNDE_PROD_TILE_URL }}
+        run: |
+          set -euo pipefail
+          for var in KEYSTORE_B64 KUNDE_ANDROID_STORE_PASSWORD KUNDE_ANDROID_KEY_ALIAS KUNDE_ANDROID_KEY_PASSWORD; do
+            if [[ -z "${!var}" ]]; then echo "::error::Missing repository secret $var"; exit 1; fi
+          done
+          umask 077
+          export KUNDE_ANDROID_KEYSTORE="$(mktemp "$RUNNER_TEMP/kunde-release.XXXXXX")"
+          trap 'rm -f "$KUNDE_ANDROID_KEYSTORE"' EXIT
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$KUNDE_ANDROID_KEYSTORE"
+          defines=()
+          if [[ "$DIST_ENV" == prod ]]; then
+            for var in PROD_WEB PROD_SEARCH PROD_ROUTING PROD_TILES; do
+              if [[ "${!var}" != https://* || "${!var}" == *-dev.onrender.com* ]]; then
+                echo "::error::Configure production HTTPS endpoint $var"
+                exit 1
+              fi
+            done
+            defines=("--dart-define=KUNDE_WEB_URL=$PROD_WEB" "--dart-define=KUNDE_SEARCH_URL=$PROD_SEARCH" "--dart-define=KUNDE_ROUTING_URL=$PROD_ROUTING" "--dart-define=KUNDE_TILE_URL=$PROD_TILES")
+          fi
+          flutter build apk --release "${defines[@]}"
+          git diff --exit-code -- pubspec.lock
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk dist/KUNDE-Maps.apk
+          apksigner="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
+          "$apksigner" verify --verbose --print-certs dist/KUNDE-Maps.apk
+          (cd dist && sha256sum KUNDE-Maps.apk > KUNDE-Maps.apk.sha256)
+      - uses: actions/upload-artifact@v6
+        with:
+          name: kunde-maps-android-release-${{ inputs.environment }}
+          path: apps/mobile/dist/
+          if-no-files-found: error
