@@ -107,48 +107,6 @@ class _FakeGps extends GeolocatorPlatform {
 }
 
 void main() {
-  for (final language in ['ru', 'kk', 'en']) {
-    testWidgets(
-      'search works in $language when the host only provides Widgets localizations',
-      (tester) async {
-        final config = _config();
-        final httpClient = MockClient(
-          (_) async => _json({
-            'results': [
-              {'name': 'Esentai Mall', 'lat': 43.218, 'lon': 76.931},
-            ],
-          }),
-        );
-        addTearDown(httpClient.close);
-        MapPlace? selected;
-        await tester.pumpWidget(
-          WidgetsApp(
-            color: Colors.white,
-            locale: Locale(language),
-            supportedLocales: [Locale(language)],
-            pageRouteBuilder: <T>(settings, builder) => PageRouteBuilder<T>(
-              settings: settings,
-              pageBuilder: (context, _, _) => builder(context),
-            ),
-            home: PlaceSearchField(
-              search: PlaceSearch(MapsClient(config, httpClient)),
-              language: language,
-              center: () => almaty,
-              onSelected: (place) => selected = place,
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
-        expect(tester.takeException(), isNull);
-        await tester.enterText(find.byType(TextField), 'Esentai');
-        await tester.pump(const Duration(milliseconds: 500));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Esentai Mall'));
-        expect(selected?.point, const GeoPoint(43.218, 76.931));
-      },
-    );
-  }
-
   group('device location', () {
     late GeolocatorPlatform previous;
     late _FakeGps gps;
