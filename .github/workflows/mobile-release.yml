@@ -62,7 +62,8 @@ jobs:
             done
             defines=("--dart-define=KUNDE_WEB_URL=$PROD_WEB" "--dart-define=KUNDE_SEARCH_URL=$PROD_SEARCH" "--dart-define=KUNDE_ROUTING_URL=$PROD_ROUTING" "--dart-define=KUNDE_TILE_URL=$PROD_TILES")
           fi
-          flutter build apk --release --no-pub "${defines[@]}"
+          flutter build apk --release "${defines[@]}"
+          git diff --exit-code -- pubspec.lock
           mkdir -p dist
           cp build/app/outputs/flutter-apk/app-release.apk dist/KUNDE-Maps.apk
           apksigner="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"

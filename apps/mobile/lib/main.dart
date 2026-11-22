@@ -945,114 +945,143 @@ class _MapHomeState extends State<MapHome> {
     );
   }
 
-  Widget _attribution() => Align(
-    alignment: Alignment.centerLeft,
-    child: TextButton(
-      style: TextButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-      ),
-      onPressed: () => launchUrl(
-        Uri.https('www.openstreetmap.org', '/copyright'),
-        mode: LaunchMode.externalApplication,
-      ),
-      child: const Text(
-        '© OpenStreetMap contributors · © OpenMapTiles',
-        style: TextStyle(fontSize: 11),
-      ),
-    ),
+  Widget _attribution() => Wrap(
+    children: [
+      for (final (host, path, label) in [
+        ('www.openstreetmap.org', '/copyright', '© OpenStreetMap contributors'),
+        ('openmaptiles.org', '/', '© OpenMapTiles'),
+      ])
+        TextButton(
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+          ),
+          onPressed: () => launchUrl(
+            Uri.https(host, path),
+            mode: LaunchMode.externalApplication,
+          ),
+          child: Text(label, style: const TextStyle(fontSize: 11)),
+        ),
+    ],
   );
 
   Widget _sheet() {
     if (_picking) return const SizedBox.shrink();
-    final height = MediaQuery.sizeOf(context).height;
-    return DraggableScrollableSheet(
-      key: ValueKey((_tab, _navigating, _selected != null)),
-      initialChildSize: _navigating
-          ? .23
-          : _tab == 0 && _selected == null && _results.isEmpty
-          ? .21
-          : .43,
-      minChildSize: .17,
-      maxChildSize: height < 450 ? .66 : .78,
-      snap: true,
-      expand: true,
-      builder: (context, controller) => Material(
-        color: Theme.of(context).colorScheme.surface,
-        surfaceTintColor: Colors.transparent,
-        elevation: 14,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        clipBehavior: Clip.antiAlias,
-        child: ListView(
-          controller: controller,
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-          children: [
-            Center(
-              child: Container(
-                width: 34,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            _attribution(),
-            if (_loading) const LinearProgressIndicator(),
-            if (_error != null)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(w(_error!)),
-                trailing: _error == 'empty'
-                    ? null
-                    : TextButton(
-                        onPressed: _tab == 1
-                            ? _buildRoute
-                            : () {
-                                if (_query.text.trim().length >= 2) {
-                                  _search(_query.text);
-                                } else {
-                                  _nearby(_category);
-                                }
-                              },
-                        child: Text(w('retry')),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final height = constraints.maxHeight;
+        final footer = MediaQuery.textScalerOf(context).scale(11) > 15
+            ? 96
+            : 48;
+        final minSize = ((footer + 18) / height).clamp(.17, .55);
+        final initialSize = _navigating
+            ? .26
+            : _tab == 0 && _selected == null && _results.isEmpty
+            ? .21
+            : .43;
+        return DraggableScrollableSheet(
+          key: ValueKey((_tab, _navigating, _selected != null)),
+          initialChildSize: math.max(initialSize, minSize),
+          minChildSize: minSize,
+          maxChildSize: height < 450 ? .66 : .78,
+          snap: true,
+          expand: true,
+          builder: (context, controller) => Material(
+            color: Theme.of(context).colorScheme.surface,
+            surfaceTintColor: Colors.transparent,
+            elevation: 14,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                Expanded(
+                  child: ListView(
+                    controller: controller,
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 34,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
                       ),
-              ),
-            if (_tab == 0 && _selected != null) _placeCard(_selected!),
-            if (_tab == 0 && _selected == null && _results.isNotEmpty)
-              _resultsList(_results),
-            if (_tab == 0 &&
-                _selected == null &&
-                _results.isEmpty &&
-                !_loading &&
-                _error == null)
-              Wrap(
-                spacing: 6,
-                children: [
-                  ActionChip(
-                    label: Text(w('near')),
-                    onPressed: () => _nearby(null, fromDevice: true),
+                      const SizedBox(height: 8),
+                      if (_loading) const LinearProgressIndicator(),
+                      if (_error != null)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(w(_error!)),
+                          trailing: _error == 'empty'
+                              ? null
+                              : TextButton(
+                                  onPressed: _tab == 1
+                                      ? _buildRoute
+                                      : () {
+                                          if (_query.text.trim().length >= 2) {
+                                            _search(_query.text);
+                                          } else {
+                                            _nearby(_category);
+                                          }
+                                        },
+                                  child: Text(w('retry')),
+                                ),
+                        ),
+                      if (_tab == 0 && _selected != null)
+                        _placeCard(_selected!),
+                      if (_tab == 0 && _selected == null && _results.isNotEmpty)
+                        _resultsList(_results),
+                      if (_tab == 0 &&
+                          _selected == null &&
+                          _results.isEmpty &&
+                          !_loading &&
+                          _error == null)
+                        Wrap(
+                          spacing: 6,
+                          children: [
+                            ActionChip(
+                              label: Text(w('near')),
+                              onPressed: () => _nearby(null, fromDevice: true),
+                            ),
+                            ActionChip(
+                              label: Text(w('directions')),
+                              onPressed: () => _tabTo(1),
+                            ),
+                            ActionChip(
+                              label: Text(w('saved')),
+                              onPressed: () => _tabTo(3),
+                            ),
+                          ],
+                        ),
+                      if (_tab == 1) _planner(),
+                      if (_tab == 2) _navigation(),
+                      if (_tab == 3)
+                        _favorites.isEmpty
+                            ? Text(w('empty'))
+                            : _resultsList(_favorites.values.toList()),
+                      if (_tab == 4) _profile(),
+                    ],
                   ),
-                  ActionChip(
-                    label: Text(w('directions')),
-                    onPressed: () => _tabTo(1),
+                ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    0,
+                    16,
+                    _navigating ? MediaQuery.paddingOf(context).bottom : 0,
                   ),
-                  ActionChip(
-                    label: Text(w('saved')),
-                    onPressed: () => _tabTo(3),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: _attribution(),
                   ),
-                ],
-              ),
-            if (_tab == 1) _planner(),
-            if (_tab == 2) _navigation(),
-            if (_tab == 3)
-              _favorites.isEmpty
-                  ? Text(w('empty'))
-                  : _resultsList(_favorites.values.toList()),
-            if (_tab == 4) _profile(),
-          ],
-        ),
-      ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
