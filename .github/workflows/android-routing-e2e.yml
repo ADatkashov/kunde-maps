@@ -73,8 +73,7 @@ jobs:
           script: |
             adb logcat -c
             (adb logcat -v time > /tmp/logcat.txt &)
-            cd apps/mobile
-            flutter drive -d emulator-5554 --no-pub --driver=integration_test/routing_driver.dart --target=integration_test/routing_e2e_test.dart --dart-define=KUNDE_TEST_SCREENSHOTS=true --dart-define=KUNDE_DIAGNOSTICS=true
+            cd apps/mobile && flutter drive -d emulator-5554 --no-pub --driver=integration_test/routing_driver.dart --target=integration_test/routing_e2e_test.dart --dart-define=KUNDE_TEST_SCREENSHOTS=true --dart-define=KUNDE_DIAGNOSTICS=true
       - uses: actions/upload-artifact@v6
         if: always()
         with:
