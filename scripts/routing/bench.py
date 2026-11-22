@@ -51,7 +51,13 @@ def main():
             rows.append({"route": name, "km": round(first[0] / 1000, 2), "min": round(first[1] / 60, 1),
                          "p50_ms": round(statistics.median(lat), 1), "max_ms": round(max(lat), 1)})
         except Exception as exc:  # report, keep going: a missing route is a result too
-            rows.append({"route": name, "error": f"{type(exc).__name__}: {exc}"[:200]})
+            detail = ""
+            if hasattr(exc, "read"):
+                try:
+                    detail = " " + exc.read().decode("utf-8", "replace")[:300]
+                except Exception:
+                    pass
+            rows.append({"route": name, "error": f"{type(exc).__name__}: {exc}{detail}"[:500]})
     print(json.dumps({"engine": engine, "profile": profile, "routes": rows}))
 
 
