@@ -1,17 +1,9 @@
 import 'dart:math' as math;
 
-import 'platform_api.dart';
+import 'geo.dart';
+import 'models.dart';
 
 const _metersPerDegree = 111195.0;
-
-double metersBetween(Point a, Point b) {
-  final north = (a.lat - b.lat) * _metersPerDegree;
-  final east =
-      (a.lon - b.lon) *
-      _metersPerDegree *
-      math.cos((a.lat + b.lat) * math.pi / 360);
-  return math.sqrt(north * north + east * east);
-}
 
 class Projection {
   const Projection(this.along, this.offset);
@@ -19,6 +11,9 @@ class Projection {
   final double offset;
 }
 
+/// Map-matches GPS fixes to a route: progress along it, next manoeuvre,
+/// remaining distance/time, off-route and arrival detection. Pure Dart, no
+/// platform dependency.
 class RouteProgress {
   RouteProgress(this.route, this.mode) {
     for (var i = 1; i < route.points.length; i++) {
@@ -32,7 +27,7 @@ class RouteProgress {
     }
   }
 
-  final RoadRoute route;
+  final MapRoute route;
   final String mode;
   final lengths = <double>[0];
   final stepPositions = <double>[];
@@ -40,7 +35,7 @@ class RouteProgress {
   int _offFixes = 0;
   int _arrivalFixes = 0;
   DateTime? _offSince;
-  Point? _last;
+  GeoPoint? _last;
   DateTime? _time;
 
   int? get nextStep {
@@ -84,7 +79,7 @@ class RouteProgress {
       _time!.difference(_offSince!) >= const Duration(seconds: 2);
   bool get arrived => _arrivalFixes >= 2;
 
-  Projection project(Point point, double lower, double upper) {
+  Projection project(GeoPoint point, double lower, double upper) {
     var best = Projection(lower, double.infinity);
     final east = _metersPerDegree * math.cos(point.lat * math.pi / 180);
     for (var i = 1; i < lengths.length; i++) {
@@ -111,7 +106,7 @@ class RouteProgress {
     return best;
   }
 
-  bool update(Point point, double accuracy, DateTime time, DateTime now) {
+  bool update(GeoPoint point, double accuracy, DateTime time, DateTime now) {
     if (!accuracy.isFinite ||
         accuracy < 0 ||
         accuracy > 60 ||

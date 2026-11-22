@@ -1,0 +1,3 @@
+tags:
+  live:
+    description: Real network checks against the deployed Maps Platform.

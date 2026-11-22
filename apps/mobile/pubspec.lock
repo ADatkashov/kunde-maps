@@ -166,7 +166,7 @@ packages:
     source: sdk
     version: "0.0.0"
   flutter_tts:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: flutter_tts
       sha256: ce5eb209b40e95f2f4a1397116c87ab2fcdff32257d04ed7a764e75894c03775
@@ -324,6 +324,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.0"
+  kunde_maps_sdk:
+    dependency: "direct main"
+    description:
+      path: "../../packages/kunde_maps_sdk"
+      relative: true
+    source: path
+    version: "0.1.0"
   leak_tracker:
     dependency: transitive
     description:

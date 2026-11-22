@@ -14,7 +14,7 @@ import 'core/diagnostics.dart';
 import 'core/platform_api.dart';
 import 'core/strings.dart';
 import 'features/location.dart';
-import 'features/map_style.dart';
+
 import 'features/session.dart';
 
 Future<void> main() async {
@@ -124,7 +124,7 @@ class _MapHomeState extends State<MapHome> {
   NavigationSession? _session;
   bool _starting = false;
   RoadRoute? _lastPaintedRoute;
-  Position? _lastFollowedFix;
+  LocationFix? _lastFollowedFix;
   Words get w => widget.words;
   RoadRoute? get _route => _routes.isEmpty ? null : _routes[_routeIndex];
   bool get _navigating => _session?.active ?? false;
@@ -171,7 +171,12 @@ class _MapHomeState extends State<MapHome> {
 
   Future<void> _loadStyle(bool dark, String key) async {
     try {
-      final style = await nativeStyle(dark, w.language, showPoi: _showMapPois);
+      final style = await nativeStyle(
+        mapsConfig,
+        dark,
+        w.language,
+        showPoi: _showMapPois,
+      );
       if (!mounted || _styleKey != key) return;
       setState(() {
         _style = style;

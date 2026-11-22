@@ -1,0 +1,30 @@
+name: kunde_maps_sdk
+description: >-
+  KUNDE Maps SDK: map view, place search, location picker, geolocation,
+  routing, route preview, navigation, ETA, markers and camera control for the
+  KUNDE ecosystem. Contains no Taxi, Delivery or other business logic.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: '>=3.12.0 <4.0.0'
+  flutter: '>=3.47.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_tts: 4.2.5
+  geolocator: ^14.0.0
+  http: ^1.2.2
+  maplibre_gl: 0.28.0
+  material_ui: ^1.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  assets:
+    - assets/style.json
+    - assets/style-dark.json

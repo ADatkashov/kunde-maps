@@ -1,0 +1,68 @@
+name: KUNDE Maps SDK
+
+on:
+  pull_request:
+    paths:
+      - 'packages/kunde_maps_sdk/**'
+      - 'apps/web/style*.json'
+      - 'apps/web/test/fixtures/**'
+      - '.github/workflows/sdk.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'packages/kunde_maps_sdk/**'
+      - 'apps/web/style*.json'
+      - '.github/workflows/sdk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    # The SDK must work with the Flutter version of the Maps app and of the
+    # KUNDE Super App (kunde repository) at the same time.
+    name: SDK (Flutter ${{ matrix.flutter }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        flutter: ['3.47.9', '3.50.1']
+    defaults:
+      run:
+        working-directory: packages/kunde_maps_sdk
+    steps:
+      - uses: actions/checkout@v6
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ matrix.flutter }}
+          cache: true
+      - name: SDK style assets equal the canonical web style
+        working-directory: .
+        run: |
+          cmp apps/web/style.json packages/kunde_maps_sdk/assets/style.json
+          cmp apps/web/style-dark.json packages/kunde_maps_sdk/assets/style-dark.json
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed lib test
+      - run: flutter analyze
+      - run: flutter test --exclude-tags live
+
+  live-dev:
+    # Real network checks (nothing mocked) against the deployed DEV Maps
+    # Platform: search, routing in three languages, nearby places, coverage
+    # errors and an unreachable host. Not run on pull requests so a sleeping
+    # free-tier instance cannot block unrelated work; run manually or on main.
+    name: Live DEV contract
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/kunde_maps_sdk
+    steps:
+      - uses: actions/checkout@v6
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.50.1'
+          cache: true
+      - run: flutter pub get
+      - run: flutter test --tags live test/live

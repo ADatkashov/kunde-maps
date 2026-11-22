@@ -5,7 +5,6 @@ import 'package:http/http.dart' as http;
 import 'package:integration_test/integration_test.dart';
 import 'package:maplibre_gl/maplibre_gl.dart' as map;
 import 'package:maps/core/platform_api.dart';
-import 'package:maps/features/map_style.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'route_journey.dart';
@@ -17,7 +16,7 @@ void main() {
   testWidgets('native MapLibre renders roads and a live DEV route', (
     tester,
   ) async {
-    final style = await nativeStyle(false, 'en');
+    final style = await nativeStyle(mapsConfig, false, 'en');
     map.MapLibreMapController? controller;
     var styleLoaded = false;
     final nativeView = map.MapLibreMap(
