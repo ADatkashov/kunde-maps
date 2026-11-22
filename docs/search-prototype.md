@@ -130,7 +130,7 @@ Implemented in `services/search/protection.py`, wired in `server.py`. CORS is **
 | `MAPS_RATE_LIMIT_PER_MINUTE` | 60 | sustained requests per client per minute (token bucket refill) |
 | `MAPS_RATE_LIMIT_BURST` | 20 | bucket size (short bursts, e.g. fast typing) |
 | `MAPS_MAX_CONCURRENT_SEARCHES` | 16 | simultaneous searches; above it -> `503 busy` + `Retry-After: 1` |
-| `MAPS_TRUSTED_PROXY_HOPS` | 1 | the Nth entry from the right of `X-Forwarded-For` is the client IP; client-supplied left entries are ignored |
+| `MAPS_TRUSTED_PROXY_HOPS` | 1 | the Nth entry from the right of `X-Forwarded-For` is the client IP; client-supplied left entries are ignored. **On Render it must be `3`** (measured, see below) |
 | `MAPS_METRICS_TOKEN` | unset | enables `GET /metrics` (Bearer token); without it `/metrics` is `404` |
 
 - Over the limit: `429 {"error":"rate_limited","retry_after":N}` with `Retry-After`, exposed to browsers via CORS. Invalid requests also
@@ -143,3 +143,27 @@ Implemented in `services/search/protection.py`, wired in `server.py`. CORS is **
 - Responses carry `X-Content-Type-Options`, `Referrer-Policy: no-referrer`, a restrictive `Content-Security-Policy`, `Cache-Control: no-store`.
   Sockets time out after 15 s (slowloris).
 - Not done yet: API keys/quotas for B2B clients and short-lived tokens for the public web client (needs a token-issuing backend).
+
+### Measured: client IP behind Render (2026-11-22)
+`GET /debug/client` (bearer token) showed `X-Forwarded-For = [client-supplied..., real client, Cloudflare edge, Render 10.x balancer]`.
+With the default `1` the limiter key was the internal balancer address (varies per request, shared by everyone), i.e. effectively
+a global limit. Render DEV now runs with `MAPS_TRUSTED_PROXY_HOPS=3`; a spoofed leading entry is ignored. Re-measure with
+`/debug/client` whenever the hosting topology changes.
+
+## Index schema v2 and cross-script search (Phase 2)
+`build_index.py` writes schema v2 (`meta.schema_version=2`): `places(name,name_ru,name_kk,name_en,alt,kind,lat,lon,importance)` and an
+FTS5 table with a `skel` column. `textnorm.skeleton()` maps Cyrillic (RU + KK letters) and Latin spellings to one loose form, so
+`Алматы / Almaty / Almati`, `Қазақстан / Qazaqstan / Kazakhstan / Казахстан`, `Шымкент / Shymkent` compare equal; ш/с, ч/ш, ц/з stay
+distinct. Real OSM names are stored and returned unchanged. New tags extracted: `name:en`, `alt_name`, `official_name`, `old_name`,
+`int_name`, `population`, `capital`. The server still serves schema-v1 indexes (no `meta` table) with the old logic, so index and
+code can be switched independently.
+
+Ranking (v2): exact skeleton match > edit-distance-1 (last-letter typos such as `Алмата`) > prefix > rest; then `importance`
+(derived only from OSM place class, population and capital tag; no invented popularity); +80 when the user's language spelling
+matches; optional proximity bonus (<= 250 points, 150 km falloff) when `lat`/`lon` (map viewport centre) are sent. Optional query
+parameters: `lang=ru|kk|en`, `lat`, `lon` (invalid -> 400).
+
+Measured with `scripts/search-relevance.py` (36 real cities/country in RU/KK/EN/translit, same 1,450,805-row data converted to v2):
+top-1 **0.417 (v1) -> 1.000 (v2)**, MRR 0.417 -> 1.000, local latency p50 4 ms / p95 10 ms. `build-search-index.yml` now fails
+(blocks publishing) when top-1 < 0.9 on the freshly built index. Limits: typo tolerance covers a missing/extra last letter only;
+no street-level geocoding by house number, no admin hierarchy in results ("Almaty, Kazakhstan" style context) yet.

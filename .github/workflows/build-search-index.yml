@@ -32,6 +32,8 @@ jobs:
           python services/search/extract_osm.py /tmp/kunde-osm/kazakhstan.osm.pbf /tmp/kunde-osm/points.geojsonl
           python services/search/build_index.py /tmp/kunde-osm/points.geojsonl /tmp/kunde-osm/kazakhstan-search.sqlite3
           python -m unittest discover -s services/search -p 'test_*.py' -v
+          # Quality gate: real Kazakhstan places must be found first (RU/KK/EN/translit). Blocks publishing bad indexes.
+          python scripts/search-relevance.py --db /tmp/kunde-osm/kazakhstan-search.sqlite3 --min-top1 0.9
           sha256sum /tmp/kunde-osm/kazakhstan-search.sqlite3 > /tmp/kunde-osm/index.sha256
           printf 'Source: Geofabrik Kazakhstan OSM extract (ODbL)\n' > /tmp/kunde-osm/PROVENANCE.txt
           date -u '+Built UTC: %Y-%m-%dT%H:%M:%SZ' >> /tmp/kunde-osm/PROVENANCE.txt

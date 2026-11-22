@@ -356,7 +356,7 @@
       hideState();
       try {
         const results = await client.search(query, {
-          limit: 10, signal: controller.signal,
+          limit: 10, signal: controller.signal, lang, center: map.getCenter(),
           onSlow: () => { if (mine === seq) showState('warn', tr('waking')); },
         });
         if (mine !== seq) return; // a newer query superseded this one

@@ -1,6 +1,7 @@
 """KUNDE Maps search API: SQLite FTS5, offline-generated index, no public geocoder."""
 import hmac
 import json
+import math
 import os
 import re
 import sqlite3
@@ -9,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import textnorm
 from protection import BusyError, ConcurrencyGate, Metrics, TokenBuckets, client_ip, env_int
 
 DB_PATH = Path(os.environ.get("MAPS_SEARCH_DB", "/data/search.sqlite3"))
@@ -31,25 +33,116 @@ KIND_RANK = """CASE p.kind WHEN 'city' THEN 0 WHEN 'town' THEN 1 WHEN 'state' TH
                WHEN 'hamlet' THEN 5 ELSE 6 END"""
 
 
-def search(db_path, query, limit=DEFAULT_LIMIT):
-    query = " ".join(query.split()).strip()
-    if len(query) < 2 or len(query) > 100:
+CANDIDATES = 150
+LANGS = ("ru", "kk", "en")
+
+
+def _schema_version(connection):
+    try:
+        row = connection.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
+        return int(row[0]) if row else 1
+    except sqlite3.Error:
+        return 1  # legacy index without a meta table
+
+
+def _distance_km(a_lat, a_lon, b_lat, b_lon):
+    dx = (a_lon - b_lon) * math.cos(math.radians((a_lat + b_lat) / 2)) * 111.32
+    dy = (a_lat - b_lat) * 110.57
+    return math.hypot(dx, dy)
+
+
+def _fts_rows(connection, tokens, limit):
+    expression = " AND ".join('skel : "' + token + '"*' for token in tokens)
+    return connection.execute(
+        """SELECT p.id, p.name, p.name_ru, p.name_kk, p.name_en, p.alt, p.kind, p.lat, p.lon, p.importance
+           FROM places_fts f JOIN places p ON p.id = f.rowid
+           WHERE places_fts MATCH ? ORDER BY p.importance DESC, bm25(places_fts) LIMIT ?""",
+        (expression, limit),
+    ).fetchall()
+
+
+def _edit_distance_at_most_one(a, b):
+    if a == b:
+        return True
+    if abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) > len(b):
+        a, b = b, a
+    i = j = 0
+    edits = 0
+    while i < len(a) and j < len(b):
+        if a[i] == b[j]:
+            i += 1; j += 1
+            continue
+        edits += 1
+        if edits > 1:
+            return False
+        if len(a) == len(b):
+            i += 1
+        j += 1
+    return edits + (len(b) - j) + (len(a) - i) <= 1
+
+
+def _search_v2(connection, query, limit, lang, center):
+    tokens = textnorm.skeleton_tokens(query)[:8]
+    if not tokens:
         return []
+    full = " ".join(tokens)
+    rows = list(_fts_rows(connection, tokens, CANDIDATES))
+    names_of = lambda row: [row["name"], row["name_ru"], row["name_kk"], row["name_en"]] + (row["alt"] or "").split(";")
+    skeletons_of = {row["id"]: [sk for sk in (textnorm.skeleton(n) for n in names_of(row) if n) if sk] for row in rows}
+    # Typo tolerance without a second index: when nothing matches exactly, also try the query without its last
+    # letter (Алмата -> almat* reaches Алматы). Candidates within edit distance 1 of the query then rank next to exact.
+    if len(tokens[-1]) >= 4 and not any(full in sks for sks in skeletons_of.values()):
+        seen = {row["id"] for row in rows}
+        for row in _fts_rows(connection, tokens[:-1] + [tokens[-1][:-1]], CANDIDATES):
+            if row["id"] not in seen:
+                rows.append(row)
+                skeletons_of[row["id"]] = [sk for sk in (textnorm.skeleton(n) for n in names_of(row) if n) if sk]
+    ranked = []
+    for row in rows:
+        skeletons = skeletons_of[row["id"]]
+        exact = full in skeletons
+        near = not exact and len(full) >= 5 and any(_edit_distance_at_most_one(full, sk) for sk in skeletons)
+        prefix = any(sk.startswith(full) for sk in skeletons)
+        score = (10000 if exact else 8000 if near else 4000 if prefix else 0) + row["importance"]
+        own = {"ru": row["name_ru"], "kk": row["name_kk"], "en": row["name_en"]}.get(lang)
+        if exact and own and textnorm.skeleton(own) == full:
+            score += 80  # the user's own language spelling matches
+        if center is not None:
+            score += 250 * max(0.0, 1.0 - _distance_km(center[0], center[1], row["lat"], row["lon"]) / 150.0)
+        ranked.append((score, row["id"], row))
+    ranked.sort(key=lambda item: (-item[0], item[1]))
+    keys = ("id", "name", "name_ru", "name_kk", "name_en", "kind", "lat", "lon")
+    return [{k: row[k] for k in keys} for _, _, row in ranked[:limit]]
+
+
+def _search_v1(connection, query, limit):
     # FTS5 prefix search; quote every token to avoid FTS syntax injection.
     tokens = re.findall(r"[^\W_]+", query, flags=re.UNICODE)
     if not tokens:
         return []
     expression = " AND ".join('"' + token + '"*' for token in tokens[:8])
+    rows = connection.execute(
+        """SELECT p.id, p.name, p.name_ru, p.name_kk, p.kind, p.lat, p.lon
+           FROM places_fts f JOIN places p ON p.id = f.rowid
+           WHERE places_fts MATCH ? ORDER BY """ + KIND_RANK + """, bm25(places_fts) LIMIT ?""",
+        (expression, limit),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def search(db_path, query, limit=DEFAULT_LIMIT, lang="ru", center=None):
+    query = " ".join(query.split()).strip()
+    if len(query) < 2 or len(query) > 100:
+        return []
+    limit = min(max(1, int(limit)), MAX_RESULTS)
     connection = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     connection.row_factory = sqlite3.Row
     try:
-        rows = connection.execute(
-            """SELECT p.id, p.name, p.name_ru, p.name_kk, p.kind, p.lat, p.lon
-               FROM places_fts f JOIN places p ON p.id = f.rowid
-               WHERE places_fts MATCH ? ORDER BY """ + KIND_RANK + """, bm25(places_fts) LIMIT ?""",
-            (expression, min(max(1, int(limit)), MAX_RESULTS)),
-        ).fetchall()
-        return [dict(row) for row in rows]
+        if _schema_version(connection) >= 2:
+            return _search_v2(connection, query, limit, lang if lang in LANGS else "ru", center)
+        return _search_v1(connection, query, limit)
     finally:
         connection.close()
 
@@ -115,9 +208,22 @@ class Handler(BaseHTTPRequestHandler):
         if not raw_limit.isascii() or not raw_limit.isdigit() or not 1 <= int(raw_limit) <= MAX_RESULTS:
             self.reply(400, {"error": f"limit_must_be_1_to_{MAX_RESULTS}"})
             return "search"
+        lang = params.get("lang", ["ru"])[0]
+        if lang not in LANGS:
+            self.reply(400, {"error": "lang_must_be_ru_kk_or_en"})
+            return "search"
+        center = None
+        if "lat" in params or "lon" in params:
+            try:
+                center = (float(params["lat"][0]), float(params["lon"][0]))
+            except (KeyError, ValueError, IndexError):
+                center = None
+            if center is None or not (-90 <= center[0] <= 90 and -180 <= center[1] <= 180) or not all(map(math.isfinite, center)):
+                self.reply(400, {"error": "lat_lon_must_be_valid_coordinates"})
+                return "search"
         try:
             with GATE:
-                results = search(DB_PATH, query, int(raw_limit))
+                results = search(DB_PATH, query, int(raw_limit), lang, center)
             if not results:
                 METRICS.incr("empty_results")
             self.reply(200, {"results": results})

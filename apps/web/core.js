@@ -103,8 +103,8 @@
 
   /** Name in the UI language, falling back to the canonical OSM name. Never invents names. */
   function displayName(place, lang) {
-    const localized = lang === 'kk' ? place.nameKk : lang === 'ru' ? place.nameRu : '';
-    return localized || place.name || place.nameRu || place.nameKk || '';
+    const localized = lang === 'kk' ? place.nameKk : lang === 'ru' ? place.nameRu : lang === 'en' ? place.nameEn : '';
+    return localized || place.name || place.nameRu || place.nameKk || place.nameEn || '';
   }
 
   function formatCoords(lat, lon) {
@@ -127,7 +127,7 @@
     const name = typeof raw.name === 'string' ? raw.name : '';
     if (!name && !raw.name_ru && !raw.name_kk) return null;
     return {
-      id: raw.id, name, nameRu: String(raw.name_ru || ''), nameKk: String(raw.name_kk || ''),
+      id: raw.id, name, nameRu: String(raw.name_ru || ''), nameKk: String(raw.name_kk || ''), nameEn: String(raw.name_en || ''),
       kind: String(raw.kind || ''), lat, lon,
     };
   }
@@ -189,14 +189,20 @@
       }
     }
 
-    async function search(query, {limit = 10, signal, onSlow} = {}) {
+    async function search(query, {limit = 10, signal, onSlow, lang, center} = {}) {
       const q = normalizeQuery(query);
       if (!isSearchable(q)) throw new SearchError('bad_request');
       if (!baseUrl) throw new SearchError('not_configured');
-      const key = q.toLocaleLowerCase('ru') + '|' + limit;
+      // Optional ranking hints: UI language and the map viewport centre (rounded to ~1 km; not the user's location).
+      let extra = '';
+      if (LANGS.includes(lang)) extra += '&lang=' + lang;
+      if (center && Number.isFinite(center.lat) && Number.isFinite(center.lng)) {
+        extra += '&lat=' + center.lat.toFixed(2) + '&lon=' + center.lng.toFixed(2);
+      }
+      const key = q.toLocaleLowerCase('ru') + '|' + limit + extra;
       const hit = cache.get(key);
       if (hit && now() - hit.at < cacheTtlMs) return hit.results;
-      const url = baseUrl + '/v1/search?q=' + encodeURIComponent(q) + '&limit=' + limit;
+      const url = baseUrl + '/v1/search?q=' + encodeURIComponent(q) + '&limit=' + limit + extra;
       let lastError;
       for (let attempt = 0; attempt <= retries; attempt++) {
         try {

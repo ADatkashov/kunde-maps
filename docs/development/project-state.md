@@ -1,4 +1,4 @@
-# Project state (updated 2026-11-22)
+# Project state (updated 2026-11-22, after Phase 2 stages A-B)
 
 Verified in this session by executed checks:
 - Search API (Render, `kunde-maps-search-dev`): live, index 1,450,805 rows; 403 root cause = Cloudflare error 1010 on the
@@ -9,8 +9,16 @@ Verified in this session by executed checks:
   390x844 and 360x740 (touch): search -> select -> fly-to -> marker -> card worked, 0 console errors.
 
 Known limits
-- `Almaty` (Latin) does not find the city: the index has no `name:en`/transliteration (Phase 2).
-- Search API is public with no rate limiting/keys (Phase 2). CSP header and SRI/vendoring of unpkg libraries not done.
+- Search API has per-IP rate limits but no API keys/tokens yet. CSP header and SRI/vendoring of unpkg libraries not done.
 - Render Free: cold start (~30-60 s) and ~155 MB index re-download per new instance.
 - No categories/POI filters, routing, navigation, favorites, mobile apps yet.
 - Cartographic style is still the minimal 7-layer preview (no road classes, POI icons, building heights, dark style file).
+
+Phase 2 (this update)
+- A. Search API protection (PR #5, #6, live on DEV): token-bucket rate limit with `429` + `Retry-After`, concurrency cap, `/metrics`
+  (token), JSON log without query/IP, security headers. Live measurement fixed `MAPS_TRUSTED_PROXY_HOPS=3` on Render.
+  Not verifiable from the CI/sandbox egress (rotating IPs): a live hard-429 from one fixed client; covered by unit/HTTP tests.
+- B. Cross-script search + ranking (see `docs/search-prototype.md`): schema v2, `textnorm.py`, relevance benchmark
+  (top-1 0.417 -> 1.000 on 36 real places), web sends `lang` and map centre. Takes effect on DEV after the index is rebuilt
+  from OSM (new tags) and `MAPS_SEARCH_INDEX_*` are switched; the server remains compatible with the old v1 index until then.
+- Open: cartographic style v2, web CSP/SRI, index for house-number geocoding, API keys for B2B.

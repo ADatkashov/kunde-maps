@@ -9,7 +9,7 @@ import sys
 
 
 def relevant(tags):
-    return bool(tags.get("name") or tags.get("name:ru") or tags.get("name:kk")
+    return bool(tags.get("name") or tags.get("name:ru") or tags.get("name:kk") or tags.get("name:en")
                 or (tags.get("addr:street") and tags.get("addr:housenumber")))
 
 
@@ -19,8 +19,9 @@ def extract(source, destination):
     except ImportError as exc:
         raise SystemExit("Install pyosmium with: pip install osmium") from exc
 
-    fields = ("name", "name:ru", "name:kk", "addr:street", "addr:housenumber",
-              "amenity", "shop", "place", "highway", "tourism", "leisure")
+    fields = ("name", "name:ru", "name:kk", "name:en", "alt_name", "official_name", "old_name", "int_name",
+              "addr:street", "addr:housenumber", "amenity", "shop", "place", "highway", "tourism", "leisure",
+              "population", "capital")
     count = 0
     with open(destination, "w", encoding="utf-8") as output:
         class Handler(osmium.SimpleHandler):

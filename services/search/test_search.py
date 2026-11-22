@@ -32,7 +32,9 @@ class SearchIndexTest(unittest.TestCase):
             source.write_text("\n".join(json.dumps(item, ensure_ascii=False) for item in records), encoding="utf-8")
             target = root / "search.sqlite3"
             self.assertEqual(build(source, target), 2)
-            self.assertEqual(len(search(target, "Абай")), 1)
+            # Cross-script skeleton: "Абай" also reaches the genitive street name "Абая", exact match first.
+            abay = search(target, "Абай")
+            self.assertEqual([r["kind"] for r in abay], ["suburb", "address"])
             self.assertEqual(len(search(target, "Абая")), 2)
             self.assertEqual(len(search(target, "Абая 12")), 1)
             self.assertEqual(search(target, '" OR *'), [])
