@@ -97,6 +97,8 @@ class Metrics:
         self.rate_limited = 0
         self.busy = 0
         self.empty_results = 0
+        self.invalid_keys = 0
+        self.key_requests = {}
         self.started = time.time()
 
     def observe(self, route, status, seconds):
@@ -108,6 +110,10 @@ class Metrics:
                 if seconds <= bound:
                     buckets[i] += 1
             self.latency[route] = (buckets, total + seconds, count + 1)
+
+    def key_used(self, name):
+        with self._lock:
+            self.key_requests[name] = self.key_requests.get(name, 0) + 1
 
     def incr(self, name):
         with self._lock:
@@ -125,9 +131,12 @@ class Metrics:
                 lines.append(f'kunde_search_request_seconds_bucket{{route="{route}",le="+Inf"}} {count}')
                 lines.append(f'kunde_search_request_seconds_sum{{route="{route}"}} {total:.6f}')
                 lines.append(f'kunde_search_request_seconds_count{{route="{route}"}} {count}')
-            for name in ("rate_limited", "busy", "empty_results"):
+            for name in ("rate_limited", "busy", "empty_results", "invalid_keys"):
                 lines.append(f"# TYPE kunde_search_{name}_total counter")
                 lines.append(f"kunde_search_{name}_total {getattr(self, name)}")
+            lines.append("# TYPE kunde_search_key_requests_total counter")
+            for name, value in sorted(self.key_requests.items()):
+                lines.append(f'kunde_search_key_requests_total{{key="{name}"}} {value}')
             lines.append(f"kunde_search_uptime_seconds {time.time() - self.started:.0f}")
         for name, value in (extra_gauges or {}).items():
             lines.append(f"kunde_search_{name} {value}")
