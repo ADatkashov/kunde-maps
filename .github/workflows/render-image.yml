@@ -20,7 +20,8 @@ jobs:
             if curl -fsS http://127.0.0.1:18080/ >/dev/null; then break; fi
             sleep 2
           done
-          curl -fsS http://127.0.0.1:18080/ | grep -q 'KUNDE Maps'
+          curl -fsS --output /tmp/maps-render-index.html http://127.0.0.1:18080/
+          grep -q 'KUNDE Maps' /tmp/maps-render-index.html
           curl -fsS http://127.0.0.1:18080/style.json | python3 -c 'import json,sys; assert json.load(sys.stdin)["version"] == 8'
           curl -fsS http://127.0.0.1:18080/config.json | python3 -c 'import json,sys; assert json.load(sys.stdin)["styleUrl"] == "/style.json"'
           echo 'Render container HTTP smoke: OK (map tiles not included)'

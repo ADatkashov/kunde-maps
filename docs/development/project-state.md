@@ -53,3 +53,5 @@ Phase 2 (this update)
   reported by the user on physical Android. Physical Android navigation
   checks remain **NOT TESTED** and physical iPhone validation remains open.
   See the [device test record and route checklist](../phase6-physical-android.md).
+
+  - **Phase 5.5 shipped (PR #37, main `1b536b2`)**; Render DEV has autoDeploy off, so it was deployed manually (`dep-dc1f7r942hec73a6rrug`, existing free service, no new resources). Verified on the deployed DEV: `scripts/test-redesign-live.js` 8/8 (real tiles, Search/Places/Routing APIs, security headers, GPS simulated) and `scripts/test-navigation-dev.js` all scenarios (full trip with reroute and arrival, 4 viewports/themes/languages, Phase 1-4 regression). Screenshots: `docs/design/screenshots/after-*.png`. Physical Android GPS test: still open.
