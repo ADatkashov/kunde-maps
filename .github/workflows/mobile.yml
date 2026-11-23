@@ -30,10 +30,8 @@ jobs:
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
-      - name: Check mobile style against the canonical web style
-        run: |
-          cmp apps/web/style.json packages/kunde_maps_sdk/assets/style.json
-          cmp apps/web/style-dark.json packages/kunde_maps_sdk/assets/style-dark.json
+      - name: Verify generated web styles and SDK templates
+        run: python3 scripts/build-style.py --check
       - working-directory: apps/mobile
         run: |
           flutter pub get --enforce-lockfile
