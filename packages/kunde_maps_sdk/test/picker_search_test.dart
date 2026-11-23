@@ -86,81 +86,82 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
-  testWidgets('search field on Android in the picker card (scroll view, keyboard)', (
-    tester,
-  ) async {
-    // Android-only paths: selection controls, spell check, autofocus with the IME.
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
-    addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
-    tester.view.physicalSize = const Size(1080, 2400);
-    tester.view.devicePixelRatio = 2.75;
-    addTearDown(tester.view.reset);
-    final config = _config();
-    final search = PlaceSearch(
-      MapsClient(
-        config,
-        MockClient(
-          (_) async => http.Response(
-            '{"results":[]}',
-            200,
-            headers: {'content-type': 'application/json'},
+  testWidgets(
+    'search field on Android in the picker card (scroll view, keyboard)',
+    (tester) async {
+      // Android-only paths: selection controls, spell check, autofocus with the IME.
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+      addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 2.75;
+      addTearDown(tester.view.reset);
+      final config = _config();
+      final search = PlaceSearch(
+        MapsClient(
+          config,
+          MockClient(
+            (_) async => http.Response(
+              '{"results":[]}',
+              200,
+              headers: {'content-type': 'application/json'},
+            ),
           ),
         ),
-      ),
-    );
-    await tester.pumpWidget(
-      flutter_material.MaterialApp(
-        theme: flutter_material.ThemeData.dark(),
-        home: flutter_material.Scaffold(
-          appBar: flutter_material.AppBar(
-            title: const flutter_material.Text('Куда'),
-          ),
-          body: flutter_material.Stack(
-            children: [
-              flutter_material.Positioned(
-                left: 12,
-                right: 12,
-                top: 12,
-                child: flutter_material.SafeArea(
-                  child: flutter_material.Card(
-                    child: flutter_material.Padding(
-                      padding: const flutter_material.EdgeInsets.all(8),
-                      child: flutter_material.ConstrainedBox(
-                        constraints: const flutter_material.BoxConstraints(
-                          maxHeight: 400,
-                        ),
-                        child: flutter_material.SingleChildScrollView(
-                          child: PlaceSearchField(
-                            search: search,
-                            language: 'ru',
-                            center: () => const GeoPoint(43.2, 76.9),
-                            autofocus: true,
-                            onSelected: (_) {},
+      );
+      await tester.pumpWidget(
+        flutter_material.MaterialApp(
+          theme: flutter_material.ThemeData.dark(),
+          home: flutter_material.Scaffold(
+            appBar: flutter_material.AppBar(
+              title: const flutter_material.Text('Куда'),
+            ),
+            body: flutter_material.Stack(
+              children: [
+                flutter_material.Positioned(
+                  left: 12,
+                  right: 12,
+                  top: 12,
+                  child: flutter_material.SafeArea(
+                    child: flutter_material.Card(
+                      child: flutter_material.Padding(
+                        padding: const flutter_material.EdgeInsets.all(8),
+                        child: flutter_material.ConstrainedBox(
+                          constraints: const flutter_material.BoxConstraints(
+                            maxHeight: 400,
+                          ),
+                          child: flutter_material.SingleChildScrollView(
+                            child: PlaceSearchField(
+                              search: search,
+                              language: 'ru',
+                              center: () => const GeoPoint(43.2, 76.9),
+                              autofocus: true,
+                              onSelected: (_) {},
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
-    );
-    await tester.pump(const Duration(milliseconds: 200));
-    expect(tester.takeException(), isNull, reason: 'autofocused field');
-    tester.view.viewInsets = const FakeViewPadding(bottom: 900);
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(tester.takeException(), isNull, reason: 'keyboard inset');
-    await tester.enterText(find.byType(TextField), 'абай');
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(tester.takeException(), isNull, reason: 'typing an address');
-    // Long press opens the Android selection toolbar (material_ui vs host localizations).
-    await tester.longPress(find.byType(TextField));
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(tester.takeException(), isNull, reason: 'selection toolbar');
-    debugDefaultTargetPlatformOverride = null;
-  });
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(tester.takeException(), isNull, reason: 'autofocused field');
+      tester.view.viewInsets = const FakeViewPadding(bottom: 900);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(tester.takeException(), isNull, reason: 'keyboard inset');
+      await tester.enterText(find.byType(TextField), 'абай');
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(tester.takeException(), isNull, reason: 'typing an address');
+      // Long press opens the Android selection toolbar (material_ui vs host localizations).
+      await tester.longPress(find.byType(TextField));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(tester.takeException(), isNull, reason: 'selection toolbar');
+      debugDefaultTargetPlatformOverride = null;
+    },
+  );
 }
