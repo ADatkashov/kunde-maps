@@ -1,5 +1,3 @@
-import 'dart:ui' show Locale;
-
 import 'package:material_ui/material_ui.dart';
 
 /// Look of the SDK widgets. A host app wraps a subtree in

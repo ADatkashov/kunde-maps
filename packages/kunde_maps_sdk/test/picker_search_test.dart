@@ -51,6 +51,7 @@ void main() {
       flutter_material.MaterialApp(
         locale: const Locale('ru'),
         supportedLocales: const [Locale('ru'), Locale('en')],
+        // ignore: deprecated_member_use
         localizationsDelegates: GlobalMaterialLocalizations.delegates,
         theme: flutter_material.ThemeData.dark(),
         home: flutter_material.Scaffold(
