@@ -129,6 +129,13 @@ class _PlaceSearchFieldState extends State<PlaceSearchField> {
                     : null,
               ),
               onChanged: _changed,
+              // The selection toolbar lives in the host's Overlay, outside this scope.
+              contextMenuBuilder: (context, editableTextState) =>
+                  MapsMaterialScope(
+                    child: AdaptiveTextSelectionToolbar.editableText(
+                      editableTextState: editableTextState,
+                    ),
+                  ),
             ),
             if (_error != null)
               Padding(

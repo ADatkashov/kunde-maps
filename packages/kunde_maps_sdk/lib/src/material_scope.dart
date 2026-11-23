@@ -59,7 +59,7 @@ class MapsMaterialScope extends StatelessWidget {
         MediaQuery.maybePlatformBrightnessOf(context) == Brightness.dark;
     return Localizations.override(
       context: context,
-      delegates: const [DefaultMaterialLocalizations.delegate],
+      delegates: const [_AnyLocaleMaterialLocalizations()],
       child: Theme(
         data: ThemeData(
           useMaterial3: true,
@@ -73,4 +73,24 @@ class MapsMaterialScope extends StatelessWidget {
       ),
     );
   }
+}
+
+/// `DefaultMaterialLocalizations` supports English only. In a Russian or Kazakh
+/// host app the SDK's `TextField` would find no `MaterialLocalizations` and
+/// fail to build (a gray box in release builds). This delegate serves the
+/// English framework strings for every locale; the SDK's own texts come from
+/// `MapsStrings`, never from here.
+class _AnyLocaleMaterialLocalizations
+    extends LocalizationsDelegate<MaterialLocalizations> {
+  const _AnyLocaleMaterialLocalizations();
+
+  @override
+  bool isSupported(Locale locale) => true;
+
+  @override
+  Future<MaterialLocalizations> load(Locale locale) =>
+      DefaultMaterialLocalizations.delegate.load(const Locale('en'));
+
+  @override
+  bool shouldReload(LocalizationsDelegate<MaterialLocalizations> old) => false;
 }
