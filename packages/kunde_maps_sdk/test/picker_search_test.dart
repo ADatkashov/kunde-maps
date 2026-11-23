@@ -67,7 +67,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.text('Куда').last);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(LocationPicker),
+        matching: find.text('Куда'),
+      ),
+    );
     await tester.pump();
     expect(tester.takeException(), isNull, reason: 'opening the search field');
     // The on-screen keyboard (about a third of the screen) appears.
