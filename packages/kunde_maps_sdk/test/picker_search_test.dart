@@ -1,11 +1,12 @@
 // Reproduces the report "tap the address field in the map picker: a gray
 // rectangle covers the screen" on a flutter/material host in the reporter's
 // conditions: Russian, dark system theme, the on-screen keyboard open.
-import 'dart:ui' show Brightness, Size;
+import 'dart:ui' show Brightness, Locale, Size;
 
 import 'package:flutter/foundation.dart';
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart' as flutter_material;
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -48,6 +49,9 @@ void main() {
     );
     await tester.pumpWidget(
       flutter_material.MaterialApp(
+        locale: const Locale('ru'),
+        supportedLocales: const [Locale('ru'), Locale('en')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
         theme: flutter_material.ThemeData.dark(),
         home: flutter_material.Scaffold(
           appBar: flutter_material.AppBar(
